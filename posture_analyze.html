@@ -1,0 +1,1667 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Kenshō · Advanced 3D Posture Analysis</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400&display=swap" rel="stylesheet">
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.2.0/dist/tf-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.2.0/dist/tf-converter.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-cpu@4.2.0/dist/tf-backend-cpu.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.0/dist/pose-detection.min.js"></script>
+
+<!-- Three.js from CDN -->
+<script src="https://unpkg.com/three@0.152.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.152.0/examples/js/controls/OrbitControls.js"></script>
+
+<style>
+:root{
+  --bg:#0a0908;--c1:#14120f;--c2:#1c1915;--b1:#2a2520;--b2:#3a342b;
+  --gold:#c9a84c;--gold2:#e8c97a;--gold-dim:#8b7434;
+  --green:#27ae60;--green2:#2ecc71;--green-dim:#1a6e3c;
+  --red:#e74c3c;--red2:#c0392b;--amber:#e67e22;--amber2:#d35400;
+  --blue:#3498db;--purple:#9b59b6;
+  --cream:#f5f0e8;--warm:#d4c4ad;--dim:#7a6f5e;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+body{
+  font-family:"DM Sans",sans-serif;background:var(--bg);color:var(--cream);
+  min-height:100vh;overflow-x:hidden;
+}
+
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  opacity:0.35;
+}
+
+/* ═══ TOPBAR ═══ */
+#tb{
+  height:56px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 32px;background:rgba(10,9,8,0.96);border-bottom:1px solid var(--b1);
+  position:sticky;top:0;z-index:100;backdrop-filter:blur(12px);
+}
+.logo{
+  font-family:"Playfair Display",serif;font-size:18px;letter-spacing:2.5px;
+  color:var(--cream);display:flex;align-items:center;gap:8px;
+}
+.logo em{color:var(--gold);font-style:italic;}
+.logo-badge{
+  padding:3px 10px;border-radius:12px;background:rgba(201,168,76,0.12);
+  border:1px solid rgba(201,168,76,0.3);font-family:"DM Mono",monospace;
+  font-size:7px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);
+}
+#pill{
+  display:flex;align-items:center;gap:8px;padding:5px 16px;border-radius:20px;
+  border:1px solid var(--b2);font-family:"DM Mono",monospace;font-size:8px;
+  letter-spacing:1.8px;text-transform:uppercase;color:var(--dim);transition:.3s;
+}
+#pill.ready{border-color:rgba(46,204,113,.5);color:var(--green2);}
+#pill.error{border-color:rgba(231,76,60,.5);color:var(--red);}
+#dot{
+  width:7px;height:7px;border-radius:50%;background:var(--dim);flex-shrink:0;
+}
+#dot.spin{background:var(--gold);animation:pulse 1s infinite;}
+#dot.ready{background:var(--green2);box-shadow:0 0 10px var(--green2);}
+#dot.error{background:var(--red);}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.2}}
+
+/* ═══ UPLOAD PAGE ═══ */
+#pu{
+  min-height:calc(100vh - 56px);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;padding:48px 24px;position:relative;z-index:1;
+}
+.hero{text-align:center;margin-bottom:40px;max-width:680px;}
+.hk{
+  font-family:"DM Mono",monospace;font-size:9px;letter-spacing:5px;
+  text-transform:uppercase;color:var(--gold);margin-bottom:16px;
+  display:flex;align-items:center;justify-content:center;gap:14px;
+}
+.hk::before,.hk::after{content:"";width:32px;height:1px;background:var(--b2);}
+.ht{
+  font-family:"Playfair Display",serif;font-size:clamp(36px,6vw,56px);
+  color:var(--cream);line-height:1.2;margin-bottom:12px;
+}
+.ht em{color:var(--gold);font-style:italic;}
+.hs{
+  font-size:13px;color:var(--warm);line-height:1.8;max-width:520px;margin:0 auto;
+}
+.features{
+  display:flex;gap:24px;margin-top:28px;justify-content:center;flex-wrap:wrap;
+}
+.feat{
+  display:flex;align-items:center;gap:8px;font-family:"DM Mono",monospace;
+  font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--dim);
+}
+.feat-icon{
+  width:20px;height:20px;border-radius:50%;background:var(--c2);
+  border:1px solid var(--b2);display:flex;align-items:center;
+  justify-content:center;font-size:10px;
+}
+
+#dz{
+  position:relative;width:100%;max-width:560px;border:2px dashed var(--b2);
+  border-radius:16px;background:var(--c1);overflow:hidden;cursor:pointer;
+  transition:all 0.3s cubic-bezier(0.4,0,0.2,1);
+}
+#dz::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse at 50% 0%,rgba(201,168,76,.1) 0%,transparent 70%);
+}
+#dz:hover,#dz.drag{
+  border-color:var(--gold);transform:translateY(-4px);
+  box-shadow:0 8px 32px rgba(201,168,76,0.15);
+}
+#dz.filled{border-style:solid;border-color:var(--b1);cursor:default;}
+#dz input{position:absolute;inset:0;opacity:0;cursor:pointer;z-index:3;}
+#dz.filled input{display:none;}
+
+#dzin{
+  padding:64px 40px;text-align:center;display:flex;
+  flex-direction:column;align-items:center;
+}
+.dzico{
+  width:56px;height:56px;border-radius:50%;border:2px solid var(--b2);
+  background:var(--c2);display:flex;align-items:center;justify-content:center;
+  font-size:24px;margin-bottom:20px;transition:.3s;
+}
+#dz:hover .dzico{border-color:var(--gold);background:rgba(201,168,76,0.08);}
+.dzt{
+  font-family:"Playfair Display",serif;font-size:22px;
+  color:var(--cream);margin-bottom:8px;
+}
+.dzs{
+  font-family:"DM Mono",monospace;font-size:9px;letter-spacing:2.5px;
+  text-transform:uppercase;color:var(--dim);margin-bottom:24px;
+}
+.dzti{margin-top:8px;display:flex;flex-direction:column;gap:8px;text-align:left;}
+.dztip{
+  font-size:11px;color:var(--dim);display:flex;align-items:center;gap:10px;
+}
+.td{width:4px;height:4px;border-radius:50%;background:var(--gold);flex-shrink:0;}
+
+#pi{
+  width:100%;height:420px;object-fit:contain;background:#000;
+  display:none;border-radius:16px;
+}
+#pi.on{display:block;}
+
+.fab{
+  position:absolute;bottom:16px;right:16px;z-index:5;
+  display:flex;gap:8px;opacity:0;pointer-events:none;transition:.3s;
+}
+#dz.filled .fab{opacity:1;pointer-events:all;}
+.fb{
+  padding:8px 20px;border-radius:20px;background:rgba(0,0,0,0.85);
+  border:1px solid var(--b2);color:var(--warm);
+  font-family:"DM Mono",monospace;font-size:9px;
+  letter-spacing:2px;text-transform:uppercase;cursor:pointer;
+  transition:.2s;backdrop-filter:blur(8px);
+}
+.fb:hover{border-color:var(--gold);color:var(--gold);}
+.fb.go{
+  background:rgba(201,168,76,0.2);border-color:var(--gold);color:var(--gold);
+}
+
+#bgo{
+  margin-top:24px;padding:14px 56px;background:var(--gold);
+  color:var(--bg);border:none;border-radius:6px;
+  font-family:"DM Mono",monospace;font-size:10px;
+  letter-spacing:3.5px;text-transform:uppercase;font-weight:500;
+  cursor:pointer;transition:.3s;display:none;
+  box-shadow:0 4px 20px rgba(201,168,76,0.25);
+}
+#bgo.on{display:inline-block;}
+#bgo:hover{
+  background:var(--gold2);transform:translateY(-2px);
+  box-shadow:0 6px 28px rgba(201,168,76,0.35);
+}
+
+.prv{
+  margin-top:16px;font-family:"DM Mono",monospace;
+  font-size:9px;color:var(--dim);letter-spacing:1.2px;
+  display:flex;align-items:center;gap:6px;
+}
+
+/* ═══ PROGRESS OVERLAY ═══ */
+#pp{
+  display:none;position:fixed;inset:0;z-index:200;
+  background:rgba(10,9,8,0.98);backdrop-filter:blur(16px);
+  flex-direction:column;align-items:center;justify-content:center;gap:20px;
+}
+#pp.on{display:flex;}
+.ppl{
+  font-family:"Playfair Display",serif;font-size:24px;
+  color:var(--cream);letter-spacing:3.5px;margin-bottom:8px;
+}
+.ppl em{color:var(--gold);font-style:italic;}
+.pring{transform:rotate(-90deg);}
+.prt{fill:none;stroke:var(--b2);stroke-width:3;}
+.prpc{
+  fill:none;stroke:var(--gold);stroke-width:3;stroke-linecap:round;
+  stroke-dasharray:226;stroke-dashoffset:226;transition:.5s ease;
+}
+.pmsg{
+  font-family:"DM Mono",monospace;font-size:10px;
+  letter-spacing:2.5px;text-transform:uppercase;color:var(--warm);
+  min-height:18px;
+}
+.pbw{
+  width:240px;height:3px;background:var(--b1);
+  border-radius:3px;overflow:hidden;
+}
+.pbf{height:100%;background:var(--gold);width:0;transition:.5s ease;}
+
+/* ═══ REPORT PAGE ═══ */
+#pr{display:none;}
+#pr.on{display:block;}
+
+.rb{
+  padding:16px 32px;display:flex;align-items:center;
+  justify-content:space-between;border-bottom:1px solid var(--b1);
+  background:var(--c1);
+}
+.rt{font-family:"Playfair Display",serif;font-size:18px;color:var(--cream);}
+.rd{
+  font-family:"DM Mono",monospace;font-size:8px;
+  color:var(--dim);letter-spacing:1.6px;margin-top:2px;
+}
+#bbk{
+  padding:8px 20px;border:1px solid var(--b2);border-radius:6px;
+  background:transparent;color:var(--warm);
+  font-family:"DM Mono",monospace;font-size:9px;
+  letter-spacing:2.5px;text-transform:uppercase;cursor:pointer;transition:.2s;
+}
+#bbk:hover{border-color:var(--gold);color:var(--gold);}
+
+.rbody{
+  display:grid;grid-template-columns:auto 1fr;
+  min-height:calc(100vh - 56px - 52px);
+}
+
+/* ═══ LEFT: CANVAS PANEL ═══ */
+.pcol{
+  padding:24px;display:flex;flex-direction:column;gap:16px;
+  border-right:1px solid var(--b1);background:var(--c1);
+  max-width:680px;
+}
+#cv{display:block;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,0.3);}
+
+/* 3D Viewer */
+#viewer3d{
+  width:100%;height:500px;border-radius:12px;
+  border:2px solid var(--b1);box-shadow:0 4px 24px rgba(0,0,0,0.3);
+  position:relative;overflow:hidden;display:none;
+  background:linear-gradient(135deg, #1a1614 0%, #0a0908 100%);
+}
+#viewer3d.on{display:block;}
+#viewer3d canvas{
+  display:block !important;
+  width:100% !important;
+  height:100% !important;
+}
+.viewer-info{
+  position:absolute;top:12px;left:12px;z-index:10;
+  background:rgba(0,0,0,0.8);backdrop-filter:blur(8px);
+  padding:8px 14px;border-radius:8px;
+  font-family:"DM Mono",monospace;font-size:9px;
+  color:var(--gold);letter-spacing:1.5px;
+  border:1px solid rgba(201,168,76,0.4);
+  pointer-events:none;
+}
+
+.dpi{
+  font-family:"DM Mono",monospace;font-size:10px;color:var(--green2);
+  padding:6px 14px;border-radius:12px;background:rgba(46,204,113,0.1);
+  border:1px solid rgba(46,204,113,0.25);width:fit-content;
+  letter-spacing:1.5px;
+}
+
+.lbtns{display:flex;gap:8px;flex-wrap:wrap;}
+.lb{
+  padding:8px 16px;border-radius:16px;background:var(--c2);
+  border:1px solid var(--b2);color:var(--dim);
+  font-family:"DM Mono",monospace;font-size:9px;
+  letter-spacing:1.8px;text-transform:uppercase;cursor:pointer;transition:.2s;
+}
+.lb.on{
+  border-color:var(--gold);color:var(--gold);
+  background:rgba(201,168,76,0.12);
+}
+.lb:hover{border-color:var(--gold);color:var(--gold);}
+
+.view-mode{
+  margin-top:12px;padding:16px;background:var(--c2);
+  border-radius:12px;border:1px solid var(--b1);
+}
+.view-title{
+  font-family:"DM Mono",monospace;font-size:8px;
+  letter-spacing:3px;text-transform:uppercase;color:var(--dim);
+  margin-bottom:12px;
+}
+.view-btns{display:flex;gap:8px;}
+.view-btn{
+  flex:1;padding:10px;border-radius:8px;
+  background:var(--c1);border:1px solid var(--b2);
+  color:var(--warm);font-family:"DM Mono",monospace;
+  font-size:9px;letter-spacing:2px;text-transform:uppercase;
+  cursor:pointer;transition:.2s;
+}
+.view-btn:hover,.view-btn.active{
+  border-color:var(--gold);color:var(--gold);
+  background:rgba(201,168,76,0.1);
+}
+
+/* ═══ RIGHT: METRICS ═══ */
+.ccol{overflow-y:auto;padding:24px 28px;}
+
+.sh{
+  font-family:"DM Mono",monospace;font-size:8px;
+  letter-spacing:4px;text-transform:uppercase;color:var(--gold);
+  padding-bottom:12px;margin-bottom:20px;
+  border-bottom:1px solid var(--b1);display:flex;
+  align-items:center;gap:12px;
+}
+.sh::before{
+  content:"";width:24px;height:2px;background:var(--gold);
+}
+
+.section{margin-bottom:40px;}
+.section-title{
+  font-family:"Playfair Display",serif;font-size:16px;
+  color:var(--cream);margin-bottom:16px;display:flex;
+  align-items:center;gap:10px;
+}
+.section-icon{font-size:20px;}
+
+.mg{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  gap:16px;
+}
+
+.mc{
+  background:var(--c2);border:1px solid var(--b1);
+  border-radius:12px;padding:18px 20px;position:relative;
+  overflow:hidden;transition:.3s;
+}
+.mc:hover{
+  border-color:var(--b2);transform:translateY(-2px);
+  box-shadow:0 8px 24px rgba(0,0,0,0.2);
+}
+.mc::before{
+  content:"";position:absolute;top:0;left:0;right:0;height:3px;
+}
+.mc.gg::before{background:linear-gradient(90deg,var(--green),var(--green2));}
+.mc.go::before{background:linear-gradient(90deg,var(--amber2),var(--amber));}
+.mc.gw::before{background:linear-gradient(90deg,var(--amber),var(--red));}
+.mc.gb::before{background:linear-gradient(90deg,var(--red),var(--red2));}
+
+.mi{font-size:20px;margin-bottom:8px;display:block;}
+.mn{
+  font-family:"DM Mono",monospace;font-size:9px;
+  letter-spacing:2.5px;text-transform:uppercase;color:var(--dim);
+  margin-bottom:6px;
+}
+.md{
+  font-size:10px;color:var(--dim);line-height:1.6;
+  margin-bottom:12px;opacity:0.85;
+}
+
+.mv{display:flex;align-items:baseline;gap:4px;margin-bottom:12px;}
+.mnum{
+  font-family:"Playfair Display",serif;font-size:36px;
+  font-weight:400;line-height:1;
+}
+.mnum.g{color:var(--green);}
+.mnum.y{color:var(--amber);}
+.mnum.b{color:var(--red);}
+.mu{font-size:14px;color:var(--dim);margin-left:2px;}
+
+.mbar{
+  height:4px;background:rgba(255,255,255,0.05);
+  border-radius:4px;overflow:hidden;margin:10px 0 12px;
+  box-shadow:inset 0 1px 3px rgba(0,0,0,0.3);
+}
+.mbf{
+  height:100%;border-radius:4px;width:0;
+  transition:width 1.4s cubic-bezier(0.4,0,0.2,1);
+}
+
+.mft{display:flex;align-items:center;justify-content:space-between;}
+.bdg{
+  padding:4px 10px;border-radius:4px;
+  font-family:"DM Mono",monospace;font-size:7px;
+  letter-spacing:2px;text-transform:uppercase;font-weight:700;
+}
+.bdg.gg{background:rgba(46,204,113,0.15);color:var(--green2);}
+.bdg.go{background:rgba(211,84,0,0.22);color:var(--amber);}
+.bdg.gw{background:rgba(231,76,60,0.18);color:var(--red);}
+.bdg.gb{background:rgba(192,57,43,0.22);color:var(--red);}
+.midl{font-family:"DM Mono",monospace;font-size:8px;color:var(--dim);}
+
+.nod{
+  padding:48px 20px;text-align:center;display:flex;
+  flex-direction:column;align-items:center;gap:14px;
+}
+.noi{font-size:42px;}
+.not{
+  font-family:"Playfair Display",serif;font-size:20px;
+  color:var(--warm);margin-bottom:4px;
+}
+.nob{
+  font-size:11px;color:var(--dim);line-height:1.8;
+  max-width:280px;
+}
+
+/* ═══ ANIMATIONS ═══ */
+@keyframes fadeUp{
+  from{opacity:0;transform:translateY(10px)}
+  to{opacity:1;transform:none}
+}
+.fu{animation:fadeUp 0.4s ease both;}
+.fu:nth-child(1){animation-delay:0.05s}
+.fu:nth-child(2){animation-delay:0.1s}
+.fu:nth-child(3){animation-delay:0.15s}
+.fu:nth-child(4){animation-delay:0.2s}
+.fu:nth-child(5){animation-delay:0.25s}
+.fu:nth-child(6){animation-delay:0.3s}
+
+/* ═══ RESPONSIVE ═══ */
+@media(max-width:1024px){
+  .rbody{grid-template-columns:1fr;}
+  .pcol{max-width:100%;border-right:none;border-bottom:1px solid var(--b1);}
+  #cv{max-width:100%;}
+  .mg{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<div id="tb">
+  <div class="logo">
+    Kenshō <em>·</em> Advanced
+    <span class="logo-badge">15 METRICS + 3D</span>
+  </div>
+  <div id="pill">
+    <div id="dot" class="spin"></div>
+    <span id="ptxt">Initializing</span>
+  </div>
+</div>
+
+<div id="pu">
+  <div class="hero">
+    <div class="hk">Clinical Assessment · 3D Visualization · CPU Mode</div>
+    <h1 class="ht">Full Body <em>3D Posture</em> Analysis</h1>
+    <p class="hs">
+      Upload a lateral (side view) photo for comprehensive biomechanical assessment.
+      15 clinical metrics with interactive 3D skeleton visualization.
+    </p>
+    <div class="features">
+      <div class="feat">
+        <div class="feat-icon">🧠</div>
+        <span>MoveNet AI</span>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">📊</div>
+        <span>15 Metrics</span>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">🎨</div>
+        <span>Heat Map</span>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">🌐</div>
+        <span>3D Interactive</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="dz">
+    <input type="file" id="fi" accept="image/*">
+    <div id="dzin">
+      <div class="dzico">⬆</div>
+      <div class="dzt">Upload Photo</div>
+      <div class="dzs">Drag & Drop or Click</div>
+      <div class="dzti">
+        <div class="dztip"><div class="td"></div>Lateral (side) view recommended</div>
+        <div class="dztip"><div class="td"></div>Full body visible from head to toe</div>
+        <div class="dztip"><div class="td"></div>Interactive 3D skeleton visualization</div>
+      </div>
+    </div>
+    <img id="pi" src="" alt="">
+    <div class="fab">
+      <button class="fb" onclick="resetF(event)">Change</button>
+      <button class="fb go" onclick="go()">Analyze →</button>
+    </div>
+  </div>
+  
+  <button id="bgo" onclick="go()">Start Analysis</button>
+  <p class="prv">🔒 Privacy: Photo never leaves your device</p>
+</div>
+
+<div id="pp">
+  <div class="ppl">Kenshō <em>·</em> Processing</div>
+  <svg class="pring" width="80" height="80" viewBox="0 0 80 80">
+    <circle class="prt" cx="40" cy="40" r="36"/>
+    <circle class="prpc" id="prp" cx="40" cy="40" r="36"/>
+  </svg>
+  <div class="pmsg" id="pmsg">Initializing...</div>
+  <div class="pbw"><div class="pbf" id="pbf"></div></div>
+</div>
+
+<div id="pr">
+  <div class="rb">
+    <div>
+      <div class="rt">Advanced 3D Posture Analysis</div>
+      <div class="rd" id="rd">—</div>
+    </div>
+    <button id="bbk" onclick="goBack()">← New Analysis</button>
+  </div>
+  <div class="rbody">
+    <div class="pcol">
+      <canvas id="cv"></canvas>
+      <div id="viewer3d">
+        <div class="viewer-info">🖱️ Drag to rotate · Scroll to zoom</div>
+      </div>
+      <div class="dpi" id="dp">—</div>
+      
+      <div class="view-mode">
+        <div class="view-title">Visualization Mode</div>
+        <div class="view-btns">
+          <button class="view-btn active" id="view2d" onclick="switchView('2d')">2D Canvas</button>
+          <button class="view-btn" id="view3d" onclick="switchView('3d')">3D Interactive</button>
+        </div>
+      </div>
+      
+      <div class="lbtns" id="controls2d">
+        <button class="lb on" id="lbsk" onclick="tl('sk')">Skeleton</button>
+        <button class="lb on" id="lbli" onclick="tl('li')">Reference</button>
+        <button class="lb on" id="lban" onclick="tl('an')">Angles</button>
+        <button class="lb on" id="lbhm" onclick="tl('hm')">Heat Map</button>
+        <button class="lb" id="lbar" onclick="tl('ar')">Arcs</button>
+      </div>
+    </div>
+    <div class="ccol" id="cs"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const S = {
+  det: null,
+  ready: false,
+  url: null,
+  imgEl: null,
+  iw: 0,
+  ih: 0,
+  kps: null,
+  mets: null,
+  L: {sk:true, li:true, an:true, hm:true, ar:false},
+  viewMode: '2d',
+  scene: null,
+  camera: null,
+  renderer: null,
+  skeleton3d: null,
+  controls: null,
+  animationId: null
+};
+
+const THR = 0.05;
+const BONES = [
+  [0,1],[0,2],[1,3],[2,4],
+  [3,5],[4,6],[5,6],
+  [5,7],[7,9],[6,8],[8,10],
+  [5,11],[6,12],[11,12],
+  [11,13],[13,15],[12,14],[14,16]
+];
+
+// Initialize model
+async function initModel() {
+  setP('spin','Loading CPU backend...');
+  try {
+    await tf.setBackend('cpu');
+    await tf.ready();
+    setP('spin','Loading MoveNet...');
+    try {
+      S.det = await poseDetection.createDetector(
+        poseDetection.SupportedModels.MoveNet,
+        {modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING}
+      );
+      setP('ready','CPU · Ready');
+      S.ready = true;
+      console.log('✅ MoveNet ready');
+    } catch(e2) {
+      console.error('[model]',e2);
+      setP('error','Model failed');
+    }
+  } catch(e) {
+    console.error('[backend]',e);
+    setP('error','CPU error');
+  }
+}
+
+function setP(s,t){
+  const pill = document.getElementById('pill');
+  pill.className = s==='ready'?'ready':s==='error'?'error':'';
+  document.getElementById('dot').className = s;
+  document.getElementById('ptxt').textContent = t;
+}
+
+// File upload
+const dz = document.getElementById('dz');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+dz.addEventListener('drop',e=>{
+  e.preventDefault();
+  dz.classList.remove('drag');
+  const f=e.dataTransfer.files[0];
+  if(f?.type.startsWith('image/'))loadF(f);
+});
+document.getElementById('fi').addEventListener('change',function(){
+  if(this.files[0])loadF(this.files[0]);
+});
+
+function loadF(f){
+  const r=new FileReader();
+  r.onload=ev=>{
+    S.url=ev.target.result;
+    const pi=document.getElementById('pi');
+    pi.src=S.url;
+    pi.classList.add('on');
+    document.getElementById('dzin').style.display='none';
+    dz.classList.add('filled');
+    document.getElementById('bgo').classList.add('on');
+  };
+  r.readAsDataURL(f);
+}
+
+function resetF(ev){
+  if(ev)ev.stopPropagation();
+  S.url=null;S.imgEl=null;
+  const pi=document.getElementById('pi');
+  pi.src='';pi.classList.remove('on');
+  document.getElementById('dzin').style.display='flex';
+  dz.classList.remove('filled','drag');
+  document.getElementById('bgo').classList.remove('on');
+  document.getElementById('fi').value='';
+}
+
+async function go(){
+  if(!S.url)return;
+  scr('pp');
+  pg(10,'Loading image...');await sl(100);
+  S.imgEl=await ldImg(S.url);
+  S.iw=S.imgEl.naturalWidth;
+  S.ih=S.imgEl.naturalHeight;
+  
+  pg(25,'Waiting for model...');await sl(80);
+  if(!S.ready){
+    for(let i=0;i<60&&!S.ready;i++)await sl(500);
+  }
+  if(!S.ready||!S.det){
+    setP('error','Model unavailable');
+    await sl(800);scr('pu');return;
+  }
+  
+  pg(45,'Detecting pose...');await sl(80);
+  let poses=null;
+  try{
+    poses=await S.det.estimatePoses(S.imgEl);
+    console.log('✅ Poses detected:',poses);
+  }catch(e){
+    console.error('[detect]',e);
+  }
+  
+  pg(70,'Computing 15 metrics...');await sl(100);
+  S.kps=(poses&&poses.length>0)?poses[0].keypoints:null;
+  console.log('✅ Keypoints:',S.kps);
+  S.mets=compute15Metrics(S.kps,S.iw,S.ih);
+  
+  pg(92,'Rendering...');await sl(100);
+  scr('pr');
+  document.getElementById('rd').textContent=new Date().toLocaleString('tr-TR',
+    {day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  buildMetricCards();
+  drawCanvas();
+  pg(100,'Complete');
+  
+  console.log('✅ Analysis complete');
+}
+
+function pg(p,m){
+  document.getElementById('pbf').style.width=p+'%';
+  document.getElementById('pmsg').textContent=m;
+  const C=2*Math.PI*36;
+  document.getElementById('prp').style.strokeDashoffset=(C*(1-p/100)).toFixed(2);
+}
+function ldImg(s){return new Promise((r,j)=>{const i=new Image();i.onload=()=>r(i);i.onerror=j;i.src=s;});}
+function sl(ms){return new Promise(r=>setTimeout(r,ms));}
+function scr(s){
+  document.getElementById('pu').style.display=(s==='pu')?'':'none';
+  document.getElementById('pp').classList.toggle('on',s==='pp');
+  document.getElementById('pr').classList.toggle('on',s==='pr');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 2D CANVAS DRAWING
+// ═══════════════════════════════════════════════════════════════
+function drawCanvas(){
+  const cv=document.getElementById('cv');
+  if(!S.imgEl)return;
+  
+  const maxW=Math.min(640,window.innerWidth*0.45-48);
+  const maxH=window.innerHeight-56-52-200;
+  const scale=Math.min(maxW/S.iw,maxH/S.ih);
+  const W=Math.round(S.iw*scale);
+  const H=Math.round(S.ih*scale);
+  
+  cv.width=W;cv.height=H;
+  cv.style.width=W+'px';cv.style.height=H+'px';
+  const ctx=cv.getContext('2d');
+  
+  ctx.drawImage(S.imgEl,0,0,W,H);
+  
+  if(!S.kps){
+    document.getElementById('dp').textContent='Pose not detected';
+    return;
+  }
+  
+  const cnt=S.kps.filter(k=>(k.score??0)>THR).length;
+  document.getElementById('dp').textContent=`${cnt}/17 keypoints`;
+  
+  const tp=k=>({x:k.x*scale, y:k.y*scale});
+  const okK=k=>(k.score??0)>THR;
+  const km={};
+  for(const k of S.kps)km[k.name]=k;
+  const pk=(a,b)=>(km[a]?.score??0)>=(km[b]?.score??0)?km[a]:km[b];
+  
+  const earK=pk('left_ear','right_ear');
+  const shK=pk('left_shoulder','right_shoulder');
+  const hpK=pk('left_hip','right_hip');
+  const knK=pk('left_knee','right_knee');
+  const anK=pk('left_ankle','right_ankle');
+  
+  // HEAT MAP
+  if(S.L.hm && S.mets?.ok){
+    drawHeatMap(ctx, W, H, scale, S.mets.mets);
+  }
+  
+  // Reference lines
+  if(S.L.li){
+    if(earK&&okK(earK)){
+      const ex=tp(earK).x;
+      ctx.save();
+      ctx.setLineDash([8,6]);
+      ctx.strokeStyle='rgba(46,204,113,0.7)';
+      ctx.lineWidth=Math.max(2,W*0.004);
+      ctx.beginPath();
+      ctx.moveTo(ex,0);
+      ctx.lineTo(ex,H);
+      ctx.stroke();
+      ctx.restore();
+    }
+    
+    if(shK&&hpK&&okK(shK)&&okK(hpK)){
+      const ps=tp(shK),ph=tp(hpK);
+      const gr=ctx.createLinearGradient(ps.x,ps.y,ph.x,ph.y);
+      gr.addColorStop(0,'rgba(231,76,60,0.75)');
+      gr.addColorStop(1,'rgba(52,152,219,0.75)');
+      ctx.save();
+      ctx.strokeStyle=gr;
+      ctx.lineWidth=Math.max(2.5,W*0.006);
+      ctx.lineCap='round';
+      ctx.beginPath();
+      ctx.moveTo(ps.x,ps.y);
+      ctx.lineTo(ph.x,ph.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+    
+    if(shK&&okK(shK)){
+      const sp=tp(shK);
+      ctx.save();
+      ctx.setLineDash([4,4]);
+      ctx.strokeStyle='rgba(201,168,76,0.6)';
+      ctx.lineWidth=1.5;
+      ctx.beginPath();
+      ctx.moveTo(sp.x-80,sp.y);
+      ctx.lineTo(sp.x+80,sp.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+  
+  // Skeleton
+  if(S.L.sk){
+    ctx.save();
+    ctx.lineWidth=Math.max(3,W*0.007);
+    ctx.lineJoin='round';
+    ctx.lineCap='round';
+    
+    for(const[ai,bi]of BONES){
+      const a=S.kps[ai],b=S.kps[bi];
+      if(!a||!b||!okK(a)||!okK(b))continue;
+      const pa=tp(a),pb=tp(b);
+      
+      const gr=ctx.createLinearGradient(pa.x,pa.y,pb.x,pb.y);
+      gr.addColorStop(0,'rgba(255,165,45,0.95)');
+      gr.addColorStop(1,'rgba(255,120,25,0.85)');
+      ctx.strokeStyle=gr;
+      
+      ctx.beginPath();
+      ctx.moveTo(pa.x,pa.y);
+      ctx.lineTo(pb.x,pb.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+    
+    for(const k of S.kps){
+      if(!okK(k))continue;
+      const p=tp(k);
+      const r=Math.max(6,W*0.016);
+      const rs=Math.max(4,W*0.01);
+      const small=['nose','left_eye','right_eye'].includes(k.name);
+      
+      ctx.save();
+      ctx.shadowColor='rgba(255,140,45,0.6)';
+      ctx.shadowBlur=12;
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,small?rs:r,0,Math.PI*2);
+      ctx.fillStyle='rgba(255,150,45,0.95)';
+      ctx.fill();
+      ctx.restore();
+      
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,small?rs:r,0,Math.PI*2);
+      ctx.strokeStyle='rgba(255,255,255,0.9)';
+      ctx.lineWidth=Math.max(2,W*0.005);
+      ctx.stroke();
+    }
+  }
+  
+  // Angles
+  if(S.L.an){
+    const fs=Math.max(12,Math.round(W*0.034));
+    ctx.font=`bold ${fs}px "DM Mono",monospace`;
+    
+    const angles=[];
+    
+    if(earK&&shK&&okK(earK)&&okK(shK)){
+      const dx=Math.abs(shK.x-earK.x);
+      const dy=Math.abs(shK.y-earK.y);
+      const v=Math.round(Math.atan2(dy,dx)*180/Math.PI*10)/10;
+      angles.push({kp:shK, v, good:v>=50});
+    }
+    
+    if(shK&&hpK&&knK&&okK(shK)&&okK(hpK)&&okK(knK)){
+      const v=ang3(shK.x,shK.y,hpK.x,hpK.y,knK.x,knK.y);
+      if(v!==null)angles.push({kp:hpK, v, good:v>=155});
+    }
+    
+    if(hpK&&knK&&anK&&okK(hpK)&&okK(knK)&&okK(anK)){
+      const v=ang3(hpK.x,hpK.y,knK.x,knK.y,anK.x,anK.y);
+      if(v!==null)angles.push({kp:knK, v, good:v>=155});
+    }
+    
+    for(const{kp,v,good}of angles){
+      const p=tp(kp);
+      
+      if(S.L.ar){
+        ctx.save();
+        const radius=Math.max(32,W*0.08);
+        ctx.strokeStyle=good?'rgba(46,204,113,0.45)':'rgba(231,76,60,0.45)';
+        ctx.lineWidth=Math.max(3,W*0.008);
+        ctx.lineCap='round';
+        ctx.beginPath();
+        ctx.arc(p.x,p.y,radius,-Math.PI/2,-Math.PI/2+v*Math.PI/180);
+        ctx.stroke();
+        ctx.restore();
+      }
+      
+      const txt=v.toFixed(0)+'°';
+      const tw=ctx.measureText(txt).width;
+      const col=good?'rgba(46,204,113,0.98)':'rgba(231,76,60,0.98)';
+      
+      const rx=p.x+10,ry=p.y-fs-8,rw=tw+14,rh=fs+9,rr=4;
+      
+      ctx.fillStyle='rgba(10,9,8,0.92)';
+      ctx.beginPath();
+      ctx.moveTo(rx+rr,ry);
+      ctx.lineTo(rx+rw-rr,ry);
+      ctx.arcTo(rx+rw,ry,rx+rw,ry+rr,rr);
+      ctx.lineTo(rx+rw,ry+rh-rr);
+      ctx.arcTo(rx+rw,ry+rh,rx+rw-rr,ry+rh,rr);
+      ctx.lineTo(rx+rr,ry+rh);
+      ctx.arcTo(rx,ry+rh,rx,ry+rh-rr,rr);
+      ctx.lineTo(rx,ry+rr);
+      ctx.arcTo(rx,ry,rx+rr,ry,rr);
+      ctx.closePath();
+      ctx.fill();
+      
+      ctx.strokeStyle=good?'rgba(46,204,113,0.5)':'rgba(231,76,60,0.5)';
+      ctx.lineWidth=1;
+      ctx.stroke();
+      
+      ctx.fillStyle=col;
+      ctx.fillText(txt,p.x+17,p.y-3);
+    }
+  }
+}
+
+function drawHeatMap(ctx, W, H, scale, metrics){
+  if(!S.kps)return;
+  
+  ctx.save();
+  ctx.globalAlpha=0.25;
+  
+  const tp=k=>({x:k.x*scale, y:k.y*scale});
+  const okK=k=>(k.score??0)>THR;
+  const km={};
+  for(const k of S.kps)km[k.name]=k;
+  
+  const regions=[
+    {
+      points:['nose','left_ear','right_ear','left_shoulder','right_shoulder'],
+      metricKey:'cva'
+    },
+    {
+      points:['left_shoulder','right_shoulder','left_hip','right_hip'],
+      metricKey:'spine'
+    },
+    {
+      points:['left_hip','right_hip','left_knee','right_knee'],
+      metricKey:'pelvis'
+    },
+    {
+      points:['left_knee','right_knee','left_ankle','right_ankle'],
+      metricKey:'knee_flex'
+    }
+  ];
+  
+  for(const reg of regions){
+    const pts=reg.points.map(n=>km[n]).filter(okK);
+    if(pts.length<2)continue;
+    
+    const m=metrics[reg.metricKey];
+    if(!m)continue;
+    
+    let color;
+    if(m.g==='gg')color='rgba(46,204,113,0.6)';
+    else if(m.g==='go')color='rgba(211,84,0,0.6)';
+    else if(m.g==='gw')color='rgba(231,76,60,0.6)';
+    else color='rgba(192,57,43,0.6)';
+    
+    const coords=pts.map(tp);
+    if(coords.length<2)continue;
+    
+    ctx.fillStyle=color;
+    ctx.beginPath();
+    ctx.moveTo(coords[0].x,coords[0].y);
+    for(let i=1;i<coords.length;i++){
+      ctx.lineTo(coords[i].x,coords[i].y);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+  
+  ctx.restore();
+}
+
+function ang3(ax,ay,bx,by,cx,cy){
+  const bax=ax-bx,bay=ay-by,bcx=cx-bx,bcy=cy-by;
+  const dot=bax*bcx+bay*bcy;
+  const mag=Math.sqrt((bax*bax+bay*bay)*(bcx*bcx+bcy*bcy));
+  return mag<1e-9?null:Math.round(Math.acos(Math.max(-1,Math.min(1,dot/mag)))*180/Math.PI*10)/10;
+}
+
+function tl(n){
+  S.L[n]=!S.L[n];
+  document.getElementById('lb'+n).classList.toggle('on',S.L[n]);
+  drawCanvas();
+}
+
+window.addEventListener('resize',()=>{
+  if(S.viewMode==='2d')drawCanvas();
+});
+
+// ═══════════════════════════════════════════════════════════════
+// 3D INTERACTIVE SKELETON with THREE.JS (FIXED)
+// ═══════════════════════════════════════════════════════════════
+function init3D(){
+  console.log('🌐 Initializing 3D viewer...');
+  if(!S.kps){
+    console.warn('No keypoints for 3D');
+    return;
+  }
+  
+  const container=document.getElementById('viewer3d');
+  const W=container.clientWidth;
+  const H=container.clientHeight;
+  
+  console.log(`Container: ${W}x${H}`);
+  
+  // Clear previous
+  if(S.renderer){
+    cleanup3D();
+  }
+  
+  // Scene
+  S.scene=new THREE.Scene();
+  S.scene.background=new THREE.Color(0x1a1614);
+  console.log('✅ Scene created');
+  
+  // Camera
+  S.camera=new THREE.PerspectiveCamera(60,W/H,0.1,1000);
+  S.camera.position.set(0,0,3);
+  S.camera.lookAt(0,0,0);
+  console.log('✅ Camera positioned');
+  
+  // Renderer
+  S.renderer=new THREE.WebGLRenderer({antialias:true,alpha:false});
+  S.renderer.setSize(W,H);
+  S.renderer.setPixelRatio(window.devicePixelRatio);
+  container.appendChild(S.renderer.domElement);
+  console.log('✅ Renderer added to DOM');
+  
+  // Lights
+  const ambientLight=new THREE.AmbientLight(0xffffff,0.7);
+  S.scene.add(ambientLight);
+  
+  const dirLight1=new THREE.DirectionalLight(0xffffff,0.5);
+  dirLight1.position.set(5,5,5);
+  S.scene.add(dirLight1);
+  
+  const dirLight2=new THREE.DirectionalLight(0xff9b2d,0.3);
+  dirLight2.position.set(-5,3,2);
+  S.scene.add(dirLight2);
+  
+  console.log('✅ Lights added');
+  
+  // Grid
+  const gridHelper=new THREE.GridHelper(3,10,0xc9a84c,0x3a342b);
+  gridHelper.position.y=-1.2;
+  S.scene.add(gridHelper);
+  console.log('✅ Grid added');
+  
+  // OrbitControls
+  if(THREE.OrbitControls){
+    S.controls=new THREE.OrbitControls(S.camera,S.renderer.domElement);
+    S.controls.enableDamping=true;
+    S.controls.dampingFactor=0.05;
+    S.controls.enableZoom=true;
+    S.controls.minDistance=1.5;
+    S.controls.maxDistance=8;
+    console.log('✅ OrbitControls enabled');
+  }else{
+    console.warn('⚠️ OrbitControls not available, using basic mouse controls');
+    addBasicControls(container);
+  }
+  
+  // Skeleton group
+  S.skeleton3d=new THREE.Group();
+  S.scene.add(S.skeleton3d);
+  
+  // Build skeleton
+  build3DSkeleton();
+  
+  // Start animation
+  animate();
+  
+  console.log('✅ 3D viewer initialized');
+}
+
+function animate(){
+  S.animationId=requestAnimationFrame(animate);
+  
+  if(S.controls){
+    S.controls.update();
+  }
+  
+  if(S.renderer&&S.scene&&S.camera){
+    S.renderer.render(S.scene,S.camera);
+  }
+}
+
+function addBasicControls(container){
+  let isDragging=false;
+  let previousMousePosition={x:0,y:0};
+  
+  container.addEventListener('mousedown',e=>{
+    isDragging=true;
+    previousMousePosition={x:e.clientX,y:e.clientY};
+  });
+  
+  container.addEventListener('mousemove',e=>{
+    if(!isDragging||!S.skeleton3d)return;
+    const dx=e.clientX-previousMousePosition.x;
+    const dy=e.clientY-previousMousePosition.y;
+    S.skeleton3d.rotation.y+=dx*0.01;
+    S.skeleton3d.rotation.x+=dy*0.01;
+    previousMousePosition={x:e.clientX,y:e.clientY};
+  });
+  
+  container.addEventListener('mouseup',()=>{isDragging=false;});
+  container.addEventListener('mouseleave',()=>{isDragging=false;});
+  
+  container.addEventListener('wheel',e=>{
+    e.preventDefault();
+    if(S.camera){
+      S.camera.position.z+=e.deltaY*0.005;
+      S.camera.position.z=Math.max(1.5,Math.min(8,S.camera.position.z));
+    }
+  },{passive:false});
+}
+
+function build3DSkeleton(){
+  if(!S.skeleton3d||!S.kps){
+    console.warn('Cannot build skeleton: missing data');
+    return;
+  }
+  
+  console.log('🦴 Building 3D skeleton...');
+  
+  // Clear previous
+  while(S.skeleton3d.children.length>0){
+    S.skeleton3d.remove(S.skeleton3d.children[0]);
+  }
+  
+  const okK=k=>(k?.score??0)>THR;
+  
+  // Normalize keypoints to 3D
+  const kp3d=S.kps.map(k=>{
+    if(!okK(k))return null;
+    const x=(k.x/S.iw)*2-1;
+    const y=1-(k.y/S.ih)*2;
+    return new THREE.Vector3(x,y,0);
+  });
+  
+  // Bones
+  const boneMaterial=new THREE.LineBasicMaterial({
+    color:0xff9b2d,
+    linewidth:2
+  });
+  
+  for(const[ai,bi]of BONES){
+    if(!kp3d[ai]||!kp3d[bi])continue;
+    const geometry=new THREE.BufferGeometry().setFromPoints([kp3d[ai],kp3d[bi]]);
+    const line=new THREE.Line(geometry,boneMaterial);
+    S.skeleton3d.add(line);
+  }
+  
+  // Joints
+  const jointGeometry=new THREE.SphereGeometry(0.035,16,16);
+  const jointMaterial=new THREE.MeshStandardMaterial({
+    color:0xff9b2d,
+    emissive:0xff6600,
+    emissiveIntensity:0.4,
+    metalness:0.3,
+    roughness:0.5
+  });
+  
+  for(let i=0;i<kp3d.length;i++){
+    if(!kp3d[i])continue;
+    const joint=new THREE.Mesh(jointGeometry,jointMaterial);
+    joint.position.copy(kp3d[i]);
+    S.skeleton3d.add(joint);
+  }
+  
+  // Vectors
+  const lsh=S.kps.find(k=>k.name==='left_shoulder');
+  const rsh=S.kps.find(k=>k.name==='right_shoulder');
+  const lhp=S.kps.find(k=>k.name==='left_hip');
+  const rhp=S.kps.find(k=>k.name==='right_hip');
+  
+  if(okK(lsh)&&okK(rsh)&&okK(lhp)&&okK(rhp)){
+    const shMid=new THREE.Vector3(
+      ((lsh.x+rsh.x)/2/S.iw)*2-1,
+      1-((lsh.y+rsh.y)/2/S.ih)*2,
+      0
+    );
+    const hpMid=new THREE.Vector3(
+      ((lhp.x+rhp.x)/2/S.iw)*2-1,
+      1-((lhp.y+rhp.y)/2/S.ih)*2,
+      0
+    );
+    
+    // Trunk vector
+    const trunkDir=new THREE.Vector3().subVectors(hpMid,shMid).normalize();
+    const trunkArrow=new THREE.ArrowHelper(
+      trunkDir,shMid,0.5,0x3498db,0.08,0.06
+    );
+    S.skeleton3d.add(trunkArrow);
+    
+    // Arm vector
+    const armDir=new THREE.Vector3(0,1,0);
+    const armArrow=new THREE.ArrowHelper(
+      armDir,shMid,0.3,0xe74c3c,0.06,0.05
+    );
+    S.skeleton3d.add(armArrow);
+  }
+  
+  console.log(`✅ Skeleton built: ${S.skeleton3d.children.length} objects`);
+}
+
+function switchView(mode){
+  console.log(`Switching to ${mode} view`);
+  S.viewMode=mode;
+  const cv=document.getElementById('cv');
+  const v3d=document.getElementById('viewer3d');
+  const btn2d=document.getElementById('view2d');
+  const btn3d=document.getElementById('view3d');
+  
+  if(mode==='2d'){
+    cv.style.display='block';
+    v3d.classList.remove('on');
+    btn2d.classList.add('active');
+    btn3d.classList.remove('active');
+    
+    if(S.animationId){
+      cancelAnimationFrame(S.animationId);
+      S.animationId=null;
+    }
+  }else{
+    cv.style.display='none';
+    v3d.classList.add('on');
+    btn2d.classList.remove('active');
+    btn3d.classList.add('active');
+    
+    if(!S.renderer||!S.scene){
+      init3D();
+    }else{
+      animate();
+    }
+  }
+}
+
+function cleanup3D(){
+  console.log('🧹 Cleaning up 3D scene...');
+  
+  if(S.animationId){
+    cancelAnimationFrame(S.animationId);
+    S.animationId=null;
+  }
+  
+  if(S.controls){
+    S.controls.dispose();
+    S.controls=null;
+  }
+  
+  if(S.renderer){
+    S.renderer.dispose();
+    const container=document.getElementById('viewer3d');
+    if(container&&container.contains(S.renderer.domElement)){
+      container.removeChild(S.renderer.domElement);
+    }
+    S.renderer=null;
+  }
+  
+  S.scene=null;
+  S.camera=null;
+  S.skeleton3d=null;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// COMPUTE 15 METRICS (abbreviated for space)
+// ═══════════════════════════════════════════════════════════════
+function compute15Metrics(kps,W,H){
+  if(!kps||!kps.length)return{ok:false};
+  
+  const ok=k=>(k?.score??0)>THR;
+  const g=n=>kps.find(k=>k.name===n);
+  const pk=(a,b)=>{
+    const ka=g(a),kb=g(b);
+    return(ka?.score??0)>=(kb?.score??0)?ka:kb;
+  };
+  
+  const nose=g('nose');
+  const lear=g('left_ear'),rear=g('right_ear');
+  const lsh=g('left_shoulder'),rsh=g('right_shoulder');
+  const lelb=g('left_elbow'),relb=g('right_elbow');
+  const lhp=g('left_hip'),rhp=g('right_hip');
+  const lkn=g('left_knee'),rkn=g('right_knee');
+  const lan=g('left_ankle'),ran=g('right_ankle');
+  
+  const ear=pk('left_ear','right_ear');
+  const sh=pk('left_shoulder','right_shoulder');
+  const hp=pk('left_hip','right_hip');
+  const kn=pk('left_knee','right_knee');
+  const an=pk('left_ankle','right_ankle');
+  
+  const m={};
+  
+  // 1. CVA
+  if(ok(ear)&&ok(sh)){
+    const dx=Math.abs(sh.x-ear.x);
+    const dy=Math.abs(sh.y-ear.y);
+    const v=Math.round(Math.atan2(dy,dx)*180/Math.PI*10)/10;
+    m.cva={
+      icon:'👤',name:'CVA (Forward Head)',
+      desc:'Ear-shoulder angle. <50° = forward head',
+      v,u:'°',
+      g:v>=50?'gg':v>=40?'go':v>=30?'gw':'gb',
+      gl:v>=50?'NORMAL':v>=40?'MILD FHP':v>=30?'MODERATE':'SEVERE FHP',
+      ideal:'≥ 50°',
+      bar:Math.min(100,v/60*100),
+      category:'head'
+    };
+  }
+  
+  // 2. Ear-Shoulder Distance
+  if(ok(ear)&&ok(sh)){
+    const earY=ok(ear)?ear.y:sh.y-H*0.15;
+    const anY=ok(an)?an.y:H*0.9;
+    const bodyH=Math.max(Math.abs(anY-earY),H*0.2);
+    const dx=Math.abs(sh.x-ear.x);
+    const v=Math.round(dx/bodyH*100*10)/10;
+    m.ear_sh_dist={
+      icon:'📏',name:'Neck Protraction',
+      desc:'Horizontal ear-shoulder gap',
+      v,u:'%',
+      g:v<12?'gg':v<18?'go':v<25?'gw':'gb',
+      gl:v<12?'ALIGNED':v<18?'MILD':'PROTRACTION',
+      ideal:'< 12%',
+      bar:Math.min(100,v/30*100),
+      category:'head'
+    };
+  }
+  
+  // 3. Head Tilt
+  if(ok(lear)&&ok(rear)){
+    const dy=Math.abs(lear.y-rear.y);
+    const dx=Math.abs(lear.x-rear.x);
+    const v=Math.round(Math.atan2(dy,dx)*180/Math.PI*10)/10;
+    m.head_tilt={
+      icon:'⚖️',name:'Head Lateral Tilt',
+      desc:'Ear-to-ear angle deviation',
+      v,u:'°',
+      g:v<5?'gg':v<10?'go':'gb',
+      gl:v<5?'LEVEL':v<10?'MILD TILT':'TILTED',
+      ideal:'< 5°',
+      bar:Math.min(100,v/20*100),
+      category:'head'
+    };
+  }
+  
+  // 4. Torso Tilt
+  if(ok(sh)&&ok(hp)){
+    const dx=sh.x-hp.x;
+    const dy=sh.y-hp.y;
+    const v=Math.round(Math.abs(Math.atan2(Math.abs(dx),Math.abs(dy)))*180/Math.PI*10)/10;
+    m.trunk={
+      icon:'📐',name:'Torso Tilt',
+      desc:'Shoulder-hip axis deviation',
+      v,u:'°',
+      g:v<8?'gg':v<18?'go':v<30?'gw':'gb',
+      gl:v<8?'UPRIGHT':v<18?'MILD':v<30?'MODERATE':'SEVERE LEAN',
+      ideal:'< 8°',
+      bar:Math.min(100,v/45*100),
+      category:'torso'
+    };
+  }
+  
+  // 5. Shoulder Asymmetry
+  if(ok(lsh)&&ok(rsh)){
+    const earY=ok(ear)?ear.y:lsh.y-H*0.15;
+    const anY=ok(an)?an.y:H*0.9;
+    const bodyH=Math.max(Math.abs(anY-earY),H*0.2);
+    const v=Math.round(Math.abs(lsh.y-rsh.y)/bodyH*100*10)/10;
+    m.sh_asym={
+      icon:'🔄',name:'Shoulder Asymmetry',
+      desc:'Left-right height difference',
+      v,u:'%',
+      g:v<2?'gg':v<4?'go':'gb',
+      gl:v<2?'BALANCED':v<4?'MILD':'IMBALANCED',
+      ideal:'< 2%',
+      bar:Math.min(100,v/8*100),
+      category:'torso'
+    };
+  }
+  
+  // 6. Spine Angle
+  if(ok(sh)&&ok(hp)&&ok(kn)){
+    const v=ang3(sh.x,sh.y,hp.x,hp.y,kn.x,kn.y);
+    if(v!==null){
+      m.spine={
+        icon:'🦴',name:'Spine Angle',
+        desc:'Shoulder-hip-knee. 180°=straight',
+        v,u:'°',
+        g:v>=155?'gg':v>=130?'go':v>=110?'gw':'gb',
+        gl:v>=155?'NORMAL':v>=130?'MILD KYPHOSIS':'KYPHOSIS',
+        ideal:'155–180°',
+        bar:v/180*100,
+        category:'torso'
+      };
+    }
+  }
+  
+  // 7. Pelvic Tilt
+  if(ok(lhp)&&ok(rhp)){
+    const earY=ok(ear)?ear.y:lhp.y-H*0.35;
+    const anY=ok(lan)?lan.y:ok(ran)?ran.y:H*0.9;
+    const bodyH=Math.max(Math.abs(anY-earY),H*0.25);
+    const v=Math.round(Math.abs(lhp.y-rhp.y)/bodyH*100*10)/10;
+    m.pelvis={
+      icon:'⚖',name:'Pelvic Tilt',
+      desc:'Hip asymmetry ratio',
+      v,u:'%',
+      g:v<2?'gg':v<4?'go':'gb',
+      gl:v<2?'BALANCED':v<4?'MILD TILT':'TILTED',
+      ideal:'< 2%',
+      bar:Math.min(100,v/8*100),
+      category:'pelvis'
+    };
+  }
+  
+  // 8. Lumbar Curve
+  if(ok(sh)&&ok(hp)&&ok(kn)){
+    const dx=Math.abs(hp.x-sh.x);
+    const dy=Math.abs(hp.y-sh.y);
+    const v=Math.round(Math.atan2(dx,dy)*180/Math.PI*10)/10;
+    m.lumbar={
+      icon:'💫',name:'Lumbar Curve',
+      desc:'Hip-shoulder offset angle',
+      v,u:'°',
+      g:v>=5&&v<=20?'gg':v<5||v>30?'gb':'go',
+      gl:v>=5&&v<=20?'NORMAL':v<5?'FLAT BACK':'SWAYBACK',
+      ideal:'5–20°',
+      bar:v/35*100,
+      category:'pelvis'
+    };
+  }
+  
+  // 9. Hip Flexion
+  if(ok(sh)&&ok(hp)&&ok(kn)){
+    const v=ang3(sh.x,sh.y,hp.x,hp.y,kn.x,kn.y);
+    if(v!==null){
+      const flex=180-v;
+      m.hip_flex={
+        icon:'🦵',name:'Hip Flexion',
+        desc:'Hip angle in standing',
+        v:flex,u:'°',
+        g:flex<10?'gg':flex<20?'go':'gb',
+        gl:flex<10?'EXTENDED':flex<20?'MILD FLEX':'FLEXED',
+        ideal:'< 10°',
+        bar:Math.min(100,flex/30*100),
+        category:'pelvis'
+      };
+    }
+  }
+  
+  // 10. Knee Flexion
+  if(ok(hp)&&ok(kn)&&ok(an)){
+    const v=ang3(hp.x,hp.y,kn.x,kn.y,an.x,an.y);
+    if(v!==null){
+      m.knee_flex={
+        icon:'🦵',name:'Knee Angle',
+        desc:'Hip-knee-ankle. 180°=extended',
+        v,u:'°',
+        g:v>=155?'gg':v>=130?'go':'gb',
+        gl:v>=155?'EXTENDED':v>=130?'MILD FLEX':'FLEXED',
+        ideal:'155–180°',
+        bar:v/180*100,
+        category:'knee'
+      };
+    }
+  }
+  
+  // 11. Knee Spacing
+  if(ok(lkn)&&ok(rkn)){
+    const dx=Math.abs(lkn.x-rkn.x);
+    const earY=ok(ear)?ear.y:lkn.y-H*0.6;
+    const anY=ok(lan)?lan.y:H*0.9;
+    const bodyH=Math.max(Math.abs(anY-earY),H*0.3);
+    const v=Math.round(dx/bodyH*100*10)/10;
+    m.knee_spacing={
+      icon:'📏',name:'Knee Spacing',
+      desc:'Knee-to-knee distance',
+      v,u:'%',
+      g:v>=8&&v<=15?'gg':v<8||v>20?'gb':'go',
+      gl:v>=8&&v<=15?'NORMAL':v<8?'VALGUS (X)':'VARUS (bow)',
+      ideal:'8–15%',
+      bar:v/25*100,
+      category:'knee'
+    };
+  }
+  
+  // 12. Ankle Alignment
+  if(ok(kn)&&ok(an)){
+    const dx=Math.abs(kn.x-an.x);
+    const dy=Math.abs(kn.y-an.y);
+    const v=Math.round(Math.atan2(dx,dy)*180/Math.PI*10)/10;
+    m.ankle={
+      icon:'👣',name:'Ankle Alignment',
+      desc:'Knee-ankle vertical deviation',
+      v,u:'°',
+      g:v<5?'gg':v<12?'go':'gb',
+      gl:v<5?'ALIGNED':v<12?'MILD DEV':'DEVIATED',
+      ideal:'< 5°',
+      bar:Math.min(100,v/20*100),
+      category:'knee'
+    };
+  }
+  
+  // 13. Plumb Line
+  if(ok(ear)&&ok(an)){
+    const dx=Math.abs(ear.x-an.x);
+    const dy=Math.abs(ear.y-an.y);
+    const earY=ear.y;
+    const anY=an.y;
+    const bodyH=Math.max(Math.abs(anY-earY),H*0.5);
+    const v=Math.round(dx/bodyH*100*10)/10;
+    m.plumb={
+      icon:'📍',name:'Plumb Line',
+      desc:'Ear-ankle horizontal offset',
+      v,u:'%',
+      g:v<3?'gg':v<6?'go':v<10?'gw':'gb',
+      gl:v<3?'ALIGNED':v<6?'MILD SWAY':'SWAY',
+      ideal:'< 3%',
+      bar:Math.min(100,v/15*100),
+      category:'global'
+    };
+  }
+  
+  // 14. Center of Mass
+  if(ok(sh)&&ok(hp)){
+    const midX=(sh.x+hp.x)/2;
+    const anX=ok(an)?an.x:midX;
+    const dx=Math.abs(midX-anX);
+    const earY=ok(ear)?ear.y:sh.y-H*0.15;
+    const anY=ok(an)?an.y:H*0.9;
+    const bodyH=Math.max(Math.abs(anY-earY),H*0.5);
+    const v=Math.round(dx/bodyH*100*10)/10;
+    m.com={
+      icon:'⚡',name:'Center of Mass',
+      desc:'Torso COM offset from base',
+      v,u:'%',
+      g:v<4?'gg':v<8?'go':'gb',
+      gl:v<4?'BALANCED':v<8?'MILD SHIFT':'SHIFTED',
+      ideal:'< 4%',
+      bar:Math.min(100,v/12*100),
+      category:'global'
+    };
+  }
+  
+  // 15. Overall Score
+  const allMetrics=Object.values(m);
+  const goodCount=allMetrics.filter(met=>met.g==='gg').length;
+  const total=allMetrics.length;
+  const scoreV=total>0?Math.round(goodCount/total*100):0;
+  m.overall={
+    icon:'🎯',name:'Overall Score',
+    desc:'Composite postural health index',
+    v:scoreV,u:'%',
+    g:scoreV>=80?'gg':scoreV>=60?'go':scoreV>=40?'gw':'gb',
+    gl:scoreV>=80?'EXCELLENT':scoreV>=60?'GOOD':scoreV>=40?'FAIR':'POOR',
+    ideal:'≥ 80%',
+    bar:scoreV,
+    category:'global'
+  };
+  
+  return{ok:true, mets:m};
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BUILD METRIC CARDS
+// ═══════════════════════════════════════════════════════════════
+
+function buildMetricCards(){
+  const col=document.getElementById('cs');
+  
+  if(!S.mets.ok){
+    col.innerHTML=`
+      <div class="nod">
+        <div class="noi">🔍</div>
+        <div class="not">Pose Not Detected</div>
+        <div class="nob">
+          Try a lateral (side view) photo with full body visible.
+        </div>
+      </div>
+    `;
+    return;
+  }
+  
+  const bc={
+    gg:'linear-gradient(135deg, #27ae60, #2ecc71)',
+    go:'linear-gradient(135deg, #d35400, #e67e22)',
+    gw:'linear-gradient(135deg, #e67e22, #e74c3c)',
+    gb:'linear-gradient(135deg, #e74c3c, #c0392b)'
+  };
+  const nc=g=>(g==='gg'||g==='go')?'g':g==='gw'?'y':'b';
+  
+  const categories=[
+    {id:'head', title:'Head & Neck', icon:'🧠'},
+    {id:'torso', title:'Shoulder & Upper Back', icon:'💪'},
+    {id:'pelvis', title:'Lumbar & Pelvis', icon:'🦴'},
+    {id:'knee', title:'Knee & Leg', icon:'🦵'},
+    {id:'global', title:'Global Alignment', icon:'🌐'}
+  ];
+  
+  let html='';
+  
+  for(const cat of categories){
+    const catMetrics=Object.values(S.mets.mets).filter(m=>m.category===cat.id);
+    if(catMetrics.length===0)continue;
+    
+    html+=`
+      <div class="section">
+        <div class="section-title">
+          <span class="section-icon">${cat.icon}</span>
+          ${cat.title}
+        </div>
+        <div class="mg">
+    `;
+    
+    for(const m of catMetrics){
+      const dv=(m.v??0).toFixed(1);
+      html+=`
+        <div class="mc ${m.g} fu">
+          <span class="mi">${m.icon}</span>
+          <div class="mn">${m.name}</div>
+          <div class="md">${m.desc}</div>
+          <div class="mv">
+            <span class="mnum ${nc(m.g)}">${dv}</span>
+            <span class="mu">${m.u}</span>
+          </div>
+          <div class="mbar">
+            <div class="mbf" id="b${Object.keys(S.mets.mets).find(k=>S.mets.mets[k]===m)}" 
+                 style="background:${bc[m.g]||bc.go}"></div>
+          </div>
+          <div class="mft">
+            <span class="bdg ${m.g}">${m.gl}</span>
+            <span class="midl">Ideal: ${m.ideal}</span>
+          </div>
+        </div>
+      `;
+      
+      setTimeout(()=>{
+        const k=Object.keys(S.mets.mets).find(key=>S.mets.mets[key]===m);
+        const el=document.getElementById('b'+k);
+        if(el)el.style.width=m.bar+'%';
+      },400);
+    }
+    
+    html+=`</div></div>`;
+  }
+  
+  col.innerHTML=html;
+}
+
+
+function goBack(){
+  scr('pu');
+  resetF(null);
+  document.getElementById('cs').innerHTML='';
+  S.kps=null;S.mets=null;S.imgEl=null;
+  const cv=document.getElementById('cv');
+  if(cv){cv.width=0;cv.height=0;}
+  
+  cleanup3D();
+  switchView('2d');
+}
+
+initModel();
+</script>
+</body>
+</html>

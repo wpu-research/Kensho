@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kenshō — Body & Breath Analytics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream:   #F5F0E8;
+    --warm:    #E8DDD0;
+    --bark:    #5C4A3A;
+    --bark2:   #8B7355;
+    --moss:    #4A5C3A;
+    --clay:    #C4714A;
+    --clay-lt: #E8956A;
+    --ink:     #2A1F15;
+    --glass:   rgba(245,240,232,0.85);
+    --shadow:  rgba(44,31,21,0.12);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'DM Mono', monospace;
+    background: var(--cream);
+    color: var(--ink);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Grain overlay ── */
+  body::before {
+    content:'';
+    position:fixed; inset:0; z-index:999; pointer-events:none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    opacity: 0.35;
+  }
+
+  /* ── Layout ── */
+  .app { display:flex; height:100vh; }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 240px; flex-shrink:0;
+    background: var(--bark);
+    display:flex; flex-direction:column;
+    padding: 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .sidebar::before {
+    content:'';
+    position:absolute; top:0; right:0; bottom:0; width:1px;
+    background: linear-gradient(to bottom, transparent, var(--bark2), transparent);
+  }
+  .logo {
+    padding: 32px 24px 24px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .logo-text {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 26px; font-weight:300; letter-spacing:2px;
+    color: var(--cream);
+    line-height:1;
+  }
+  .logo-sub {
+    font-size: 9px; letter-spacing:3px; text-transform:uppercase;
+    color: var(--bark2); margin-top:4px;
+  }
+
+  .nav { flex:1; padding:16px 0; }
+  .nav-item {
+    display:flex; align-items:center; gap:10px;
+    padding:10px 24px; cursor:pointer;
+    font-size:11px; letter-spacing:1.5px; text-transform:uppercase;
+    color: rgba(245,240,232,0.5);
+    transition: all 0.2s;
+    border-left: 2px solid transparent;
+  }
+  .nav-item:hover { color:var(--cream); background:rgba(255,255,255,0.05); }
+  .nav-item.active {
+    color:var(--cream); border-left-color:var(--clay);
+    background:rgba(196,113,74,0.12);
+  }
+  .nav-icon { font-size:14px; width:18px; text-align:center; }
+
+  .nav-section {
+    padding:16px 24px 6px;
+    font-size:9px; letter-spacing:2px; text-transform:uppercase;
+    color: rgba(245,240,232,0.25);
+  }
+
+  /* ── Main ── */
+  .main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+
+  .topbar {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 32px;
+    background:var(--glass); backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--warm);
+  }
+  .page-title {
+    font-family:'Cormorant Garamond',serif;
+    font-size:22px; font-weight:400; letter-spacing:1px;
+    color:var(--bark);
+  }
+  .topbar-actions { display:flex; gap:10px; }
+  .btn {
+    padding:8px 18px; border:none; cursor:pointer;
+    font-family:'DM Mono',monospace; font-size:10px; letter-spacing:1.5px;
+    text-transform:uppercase; border-radius:2px; transition:all 0.2s;
+  }
+  .btn-primary {
+    background:var(--clay); color:white;
+  }
+  .btn-primary:hover { background:var(--clay-lt); }
+  .btn-outline {
+    background:transparent; color:var(--bark);
+    border:1px solid var(--bark2);
+  }
+  .btn-outline:hover { background:var(--warm); }
+
+  .content { flex:1; overflow-y:auto; padding:24px 32px; }
+
+  /* ── Pages ── */
+  .page { display:none; animation: fadeIn 0.3s ease; }
+  .page.active { display:block; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+
+  /* ── Dashboard ── */
+  .stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
+  .stat-card {
+    background:white; border:1px solid var(--warm);
+    padding:20px; border-radius:4px;
+    position:relative; overflow:hidden;
+  }
+  .stat-card::after {
+    content:''; position:absolute; bottom:0; left:0; right:0; height:3px;
+    background:var(--clay);
+    transform:scaleX(0); transform-origin:left;
+    transition:transform 0.4s ease;
+  }
+  .stat-card:hover::after { transform:scaleX(1); }
+  .stat-label {
+    font-size:9px; letter-spacing:2px; text-transform:uppercase;
+    color:var(--bark2); margin-bottom:8px;
+  }
+  .stat-value {
+    font-family:'Cormorant Garamond',serif;
+    font-size:36px; font-weight:300; color:var(--bark); line-height:1;
+  }
+  .stat-delta { font-size:10px; color:var(--moss); margin-top:4px; }
+
+  .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+
+  .card {
+    background:white; border:1px solid var(--warm);
+    border-radius:4px; overflow:hidden;
+  }
+  .card-header {
+    padding:14px 20px; border-bottom:1px solid var(--warm);
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .card-title {
+    font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--bark2);
+  }
+  .card-body { padding:20px; }
+
+  /* Patient list */
+  .patient-item {
+    display:flex; align-items:center; gap:14px;
+    padding:12px 20px; border-bottom:1px solid var(--warm);
+    cursor:pointer; transition:background 0.15s;
+  }
+  .patient-item:last-child { border-bottom:none; }
+  .patient-item:hover { background:var(--cream); }
+  .patient-avatar {
+    width:36px; height:36px; border-radius:50%;
+    background:var(--warm); border:1px solid var(--bark2);
+    display:flex; align-items:center; justify-content:center;
+    font-size:13px; color:var(--bark); flex-shrink:0;
+  }
+  .patient-name { font-size:12px; color:var(--ink); font-weight:400; }
+  .patient-meta { font-size:10px; color:var(--bark2); margin-top:2px; }
+  .badge {
+    margin-left:auto; padding:3px 8px; border-radius:2px;
+    font-size:9px; letter-spacing:1px; text-transform:uppercase;
+  }
+  .badge-good { background:rgba(74,92,58,0.12); color:var(--moss); }
+  .badge-warn { background:rgba(196,113,74,0.12); color:var(--clay); }
+  .badge-info { background:rgba(92,74,58,0.1); color:var(--bark2); }
+
+  /* ── Exercise / Session Page ── */
+  .session-layout { display:grid; grid-template-columns:1fr 360px; gap:20px; }
+
+  .camera-container {
+    background:#1a1510; border-radius:4px; overflow:hidden;
+    position:relative; aspect-ratio:16/9;
+  }
+  video#camera { width:100%; height:100%; object-fit:cover; display:block; }
+  canvas#overlay {
+    position:absolute; inset:0; width:100%; height:100%;
+    pointer-events:none;
+  }
+
+  .camera-ui {
+    position:absolute; inset:0; pointer-events:none;
+    display:flex; flex-direction:column; justify-content:space-between;
+    padding:16px;
+  }
+  .camera-status {
+    display:flex; align-items:center; gap:8px;
+    background:rgba(26,21,16,0.75); backdrop-filter:blur(8px);
+    padding:6px 12px; border-radius:2px;
+    width:fit-content;
+  }
+  .status-dot {
+    width:6px; height:6px; border-radius:50%;
+    background:#888; transition:background 0.3s;
+  }
+  .status-dot.active { background:var(--clay); animation:pulse 1.5s infinite; }
+  .status-dot.detected { background:var(--moss); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .status-text { font-size:10px; letter-spacing:1px; color:rgba(245,240,232,0.7); }
+
+  .feedback-overlay {
+    pointer-events:none;
+  }
+  .feedback-message {
+    background:rgba(26,21,16,0.85); backdrop-filter:blur(8px);
+    padding:8px 14px; border-radius:2px; margin-bottom:6px;
+    border-left:3px solid var(--clay);
+    width:fit-content;
+    animation:slideIn 0.3s ease;
+  }
+  .feedback-message.positive { border-left-color:var(--moss); }
+  @keyframes slideIn { from{opacity:0;transform:translateX(-10px)} to{opacity:1;transform:none} }
+  .feedback-message p { font-size:11px; color:var(--cream); letter-spacing:0.5px; }
+
+  /* Metrics panel */
+  .metrics-panel { display:flex; flex-direction:column; gap:12px; }
+
+  .metric-card {
+    background:white; border:1px solid var(--warm); border-radius:4px; padding:16px;
+  }
+  .metric-label { font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--bark2); }
+  .metric-value {
+    font-family:'Cormorant Garamond',serif;
+    font-size:28px; font-weight:300; color:var(--bark); margin:4px 0;
+  }
+  .metric-bar { height:4px; background:var(--warm); border-radius:2px; overflow:hidden; }
+  .metric-fill { height:100%; border-radius:2px; transition:width 0.4s ease; }
+  .fill-good  { background:var(--moss); }
+  .fill-warn  { background:var(--clay); }
+  .fill-great { background:#4A8A5C; }
+
+  /* Rep counter */
+  .rep-display {
+    background:var(--bark); color:var(--cream); border-radius:4px;
+    padding:20px; text-align:center;
+  }
+  .rep-number {
+    font-family:'Cormorant Garamond',serif;
+    font-size:64px; font-weight:300; line-height:1;
+    color:var(--cream);
+  }
+  .rep-label { font-size:9px; letter-spacing:3px; text-transform:uppercase; color:var(--bark2); }
+
+  /* Session controls */
+  .session-controls {
+    background:white; border:1px solid var(--warm); border-radius:4px; padding:16px;
+    display:flex; flex-direction:column; gap:8px;
+  }
+
+  /* ── Report Page ── */
+  .report-container { max-width:900px; margin:0 auto; }
+  .report-header {
+    background:var(--bark); color:var(--cream); padding:32px; border-radius:4px;
+    margin-bottom:20px;
+    display:flex; align-items:flex-start; justify-content:space-between;
+  }
+  .report-grade {
+    font-family:'Cormorant Garamond',serif;
+    font-size:64px; font-weight:300; line-height:1;
+    color:var(--clay-lt);
+  }
+  .report-exercise {
+    font-family:'Cormorant Garamond',serif;
+    font-size:28px; font-weight:300; margin-bottom:4px;
+  }
+  .report-meta { font-size:10px; color:var(--bark2); letter-spacing:1px; }
+
+  .score-circle {
+    width:80px; height:80px; border-radius:50%;
+    border:2px solid var(--clay);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+  }
+  .score-val { font-size:22px; font-family:'Cormorant Garamond',serif; font-weight:400; }
+  .score-lbl { font-size:8px; letter-spacing:1px; color:var(--bark2); }
+
+  .rep-timeline { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+  .rep-dot {
+    width:40px; height:40px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:11px; font-family:'Cormorant Garamond',serif; font-size:16px;
+    border:2px solid var(--warm);
+    cursor:pointer; transition:all 0.2s;
+  }
+  .rep-dot.good { border-color:var(--moss); color:var(--moss); }
+  .rep-dot.ok   { border-color:var(--bark2); color:var(--bark2); }
+  .rep-dot.poor { border-color:var(--clay); color:var(--clay); }
+  .rep-dot:hover { transform:scale(1.1); }
+
+  .error-list { display:flex; flex-direction:column; gap:10px; }
+  .error-item {
+    padding:14px 16px; border-radius:4px; border-left:3px solid var(--clay);
+    background:rgba(196,113,74,0.06);
+  }
+  .error-item.spine { border-left-color:var(--bark2); background:rgba(92,74,58,0.06); }
+  .error-title { font-size:11px; color:var(--clay); margin-bottom:4px; }
+  .error-item.spine .error-title { color:var(--bark2); }
+  .error-rec { font-size:10px; color:var(--bark2); font-style:italic; }
+
+  /* ── Progress chart (CSS-based sparkline) ── */
+  .sparkline {
+    height:60px; position:relative; overflow:hidden;
+    display:flex; align-items:flex-end; gap:2px;
+  }
+  .spark-bar {
+    flex:1; background:var(--clay); border-radius:1px 1px 0 0;
+    transition:height 0.5s ease; min-height:2px;
+  }
+  .spark-bar.ref { background:var(--warm); }
+
+  /* ── Patient detail ── */
+  .patient-header {
+    background:var(--bark); padding:24px 28px; border-radius:4px;
+    margin-bottom:20px; color:var(--cream);
+    display:flex; align-items:center; gap:20px;
+  }
+  .patient-big-avatar {
+    width:56px; height:56px; border-radius:50%;
+    background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2);
+    display:flex; align-items:center; justify-content:center;
+    font-size:22px; color:var(--cream);
+  }
+  .patient-hname {
+    font-family:'Cormorant Garamond',serif; font-size:28px; font-weight:300;
+  }
+
+  /* ── Therapist notes ── */
+  textarea.notes {
+    width:100%; padding:12px; border:1px solid var(--warm); border-radius:4px;
+    background:var(--cream); font-family:'DM Mono',monospace; font-size:11px;
+    resize:vertical; min-height:80px; color:var(--ink); outline:none;
+  }
+  textarea.notes:focus { border-color:var(--bark2); }
+
+  /* ── Chart canvas ── */
+  .chart-wrap { padding:16px 20px 8px; height:160px; position:relative; }
+  canvas.chart { width:100% !important; height:100% !important; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width:5px; }
+  ::-webkit-scrollbar-track { background:var(--cream); }
+  ::-webkit-scrollbar-thumb { background:var(--warm); border-radius:2px; }
+
+  /* ── Modal ── */
+  .modal-backdrop {
+    display:none; position:fixed; inset:0; background:rgba(42,31,21,0.6);
+    backdrop-filter:blur(4px); z-index:1000;
+    align-items:center; justify-content:center;
+  }
+  .modal-backdrop.open { display:flex; }
+  .modal {
+    background:white; border-radius:4px; padding:32px;
+    width:500px; max-width:90vw;
+    animation:fadeIn 0.2s ease;
+  }
+  .modal h2 {
+    font-family:'Cormorant Garamond',serif; font-size:24px; font-weight:400;
+    color:var(--bark); margin-bottom:20px;
+  }
+  .form-group { margin-bottom:16px; }
+  label { display:block; font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--bark2); margin-bottom:6px; }
+  input, select {
+    width:100%; padding:9px 12px; border:1px solid var(--warm); border-radius:2px;
+    background:var(--cream); font-family:'DM Mono',monospace; font-size:11px;
+    color:var(--ink); outline:none; transition:border-color 0.2s;
+  }
+  input:focus, select:focus { border-color:var(--bark2); }
+  .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:24px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-text">Kenshō</div>
+      <div class="logo-sub">Body &amp; Breath</div>
+    </div>
+    <nav class="nav">
+      <div class="nav-section">Genel</div>
+      <div class="nav-item active" onclick="showPage('dashboard',this)">
+        <span class="nav-icon">◈</span> Dashboard
+      </div>
+      <div class="nav-item" onclick="showPage('patients',this)">
+        <span class="nav-icon">◉</span> Hastalar
+      </div>
+      <div class="nav-section">Seans</div>
+      <div class="nav-item" onclick="showPage('session',this)">
+        <span class="nav-icon">▶</span> Canlı Seans
+      </div>
+      <div class="nav-item" onclick="showPage('reports',this)">
+        <span class="nav-icon">◫</span> Raporlar
+      </div>
+      <div class="nav-section">Sistem</div>
+      <div class="nav-item" onclick="showPage('exercises',this)">
+        <span class="nav-icon">◌</span> Egzersizler
+      </div>
+    </nav>
+  </aside>
+
+  <!-- ── Main ── -->
+  <main class="main">
+    <div class="topbar">
+      <div class="page-title" id="pageTitle">Dashboard</div>
+      <div class="topbar-actions">
+        <button class="btn btn-outline" onclick="openModal('newPatient')">+ Hasta Ekle</button>
+        <button class="btn btn-primary" onclick="showPage('session', document.querySelector('[onclick*=session]'))">Seans Başlat</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- ════ DASHBOARD ════ -->
+      <div class="page active" id="page-dashboard">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">Toplam Hasta</div>
+            <div class="stat-value">3</div>
+            <div class="stat-delta">↑ 1 bu hafta</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Bu Ayki Seans</div>
+            <div class="stat-value" id="stat-sessions">0</div>
+            <div class="stat-delta">aktif takip</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Ort. Kalite Skoru</div>
+            <div class="stat-value" id="stat-score">—</div>
+            <div class="stat-delta">tüm hastalar</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Egzersiz Şablonu</div>
+            <div class="stat-value">1</div>
+            <div class="stat-delta">quadruped</div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Hasta Listesi</span>
+              <span class="badge badge-info">3 aktif</span>
+            </div>
+            <div id="patient-list-dash"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Son Seans Raporları</span>
+            </div>
+            <div class="card-body" id="recent-sessions-dash">
+              <p style="font-size:11px;color:var(--bark2);">Henüz seans yapılmadı. Seans başlatın.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════ PATIENTS ════ -->
+      <div class="page" id="page-patients">
+        <div id="patients-content"></div>
+      </div>
+
+      <!-- ════ SESSION ════ -->
+      <div class="page" id="page-session">
+        <div style="margin-bottom:16px; display:flex; gap:10px; align-items:center;">
+          <div class="form-group" style="margin:0;flex:1">
+            <label>Hasta</label>
+            <select id="sel-patient">
+              <option value="p001">Ahmet Yılmaz</option>
+              <option value="p002">Fatma Demir</option>
+              <option value="p003">Murat Çelik</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0;flex:1">
+            <label>Egzersiz</label>
+            <select id="sel-exercise">
+              <option value="quadruped_hip_extension">Quadruped Hip Extension</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="session-layout">
+          <div>
+            <div class="camera-container">
+              <video id="camera" autoplay muted playsinline></video>
+              <canvas id="overlay"></canvas>
+              <div class="camera-ui">
+                <div class="camera-status">
+                  <div class="status-dot" id="status-dot"></div>
+                  <span class="status-text" id="status-text">Kamera bekleniyor</span>
+                </div>
+                <div class="feedback-overlay" id="feedback-overlay"></div>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:12px;">
+              <button class="btn btn-primary" id="btn-start" onclick="startSession()" style="flex:1">
+                ▶ Seansı Başlat
+              </button>
+              <button class="btn btn-outline" id="btn-stop" onclick="endSession()" style="flex:1;display:none">
+                ■ Seansı Bitir
+              </button>
+            </div>
+          </div>
+
+          <div class="metrics-panel">
+            <div class="rep-display">
+              <div class="rep-label">Tekrar Sayısı</div>
+              <div class="rep-number" id="rep-count">0</div>
+              <div class="rep-label">Bu seans</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-label">Bacak Uzanım Yüksekliği</div>
+              <div class="metric-value" id="met-leg">—</div>
+              <div class="metric-bar"><div class="metric-fill fill-good" id="bar-leg" style="width:0%"></div></div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-label">Omurga Düzlüğü</div>
+              <div class="metric-value" id="met-spine">—</div>
+              <div class="metric-bar"><div class="metric-fill fill-warn" id="bar-spine" style="width:0%"></div></div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-label">DTW Benzerlik</div>
+              <div class="metric-value" id="met-dtw">—</div>
+              <div class="metric-bar"><div class="metric-fill fill-great" id="bar-dtw" style="width:0%"></div></div>
+            </div>
+
+            <div class="session-controls">
+              <div class="card-title" style="margin-bottom:8px;">Seans Durumu</div>
+              <div id="session-info" style="font-size:10px;color:var(--bark2);">
+                Seans başlatılmadı
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════ REPORTS ════ -->
+      <div class="page" id="page-reports">
+        <div id="reports-content">
+          <div class="card" style="padding:40px;text-align:center;">
+            <p style="font-family:'Cormorant Garamond',serif;font-size:24px;color:var(--bark2);font-weight:300;">
+              Henüz rapor bulunmuyor
+            </p>
+            <p style="font-size:11px;color:var(--bark2);margin-top:8px;">
+              Seans yapıldıktan sonra raporlar burada görünecek
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════ EXERCISES ════ -->
+      <div class="page" id="page-exercises">
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Quadruped Hip Extension</span>
+              <span class="badge badge-good">Şablon Mevcut</span>
+            </div>
+            <div class="card-body">
+              <p style="font-size:11px;color:var(--bark2);margin-bottom:16px;">
+                4 nokta destekte bir bacağı geriye uzatma. Postür bozukluğu, core güçlendirme ve sırt sağlığı için temel egzersiz.
+              </p>
+              <div class="grid-2" style="gap:10px;">
+                <div style="text-align:center;padding:12px;background:var(--cream);border-radius:4px;">
+                  <div style="font-family:'Cormorant Garamond',serif;font-size:28px;color:var(--bark);">6</div>
+                  <div style="font-size:9px;letter-spacing:1.5px;color:var(--bark2);text-transform:uppercase;">Ref. Tekrar</div>
+                </div>
+                <div style="text-align:center;padding:12px;background:var(--cream);border-radius:4px;">
+                  <div style="font-family:'Cormorant Garamond',serif;font-size:28px;color:var(--bark);">0.78</div>
+                  <div style="font-size:9px;letter-spacing:1.5px;color:var(--bark2);text-transform:uppercase;">Ort. Uzanım</div>
+                </div>
+              </div>
+              <div id="exercise-sparkline" class="sparkline" style="margin-top:16px;"></div>
+              <div style="font-size:9px;color:var(--bark2);text-align:center;margin-top:4px;letter-spacing:1px;">
+                REFERANS HAREKET SERİSİ
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Yeni Egzersiz Ekle</span>
+            </div>
+            <div class="card-body">
+              <p style="font-size:11px;color:var(--bark2);margin-bottom:16px;">
+                Video kaydından yeni egzersiz şablonu oluşturun.
+              </p>
+              <div class="form-group">
+                <label>Egzersiz Adı</label>
+                <input type="text" placeholder="örn. plank_hold">
+              </div>
+              <div class="form-group">
+                <label>Referans Video</label>
+                <input type="file" accept="video/*">
+              </div>
+              <button class="btn btn-primary" style="width:100%">Şablon Oluştur</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </main>
+</div>
+
+<!-- ── New Patient Modal ── -->
+<div class="modal-backdrop" id="modal-newPatient">
+  <div class="modal">
+    <h2>Yeni Hasta Ekle</h2>
+    <div class="form-group">
+      <label>Ad Soyad</label>
+      <input type="text" id="new-name" placeholder="Hasta adı">
+    </div>
+    <div class="form-group">
+      <label>Yaş</label>
+      <input type="number" id="new-age" placeholder="Yaş">
+    </div>
+    <div class="form-group">
+      <label>Tanı / Durum</label>
+      <input type="text" id="new-condition" placeholder="örn. postür bozukluğu, bel ağrısı">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('newPatient')">İptal</button>
+      <button class="btn btn-primary" onclick="addPatient()">Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Report Modal ── -->
+<div class="modal-backdrop" id="modal-report">
+  <div class="modal" style="width:700px;max-width:95vw;">
+    <div id="modal-report-content"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('report')">Kapat</button>
+      <button class="btn btn-primary" onclick="printReport()">Terapist Notları Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════════════
+const state = {
+  patients: {
+    p001: { id:'p001', name:'Ahmet Yılmaz', age:45, conditions:['postür bozukluğu','bel ağrısı'] },
+    p002: { id:'p002', name:'Fatma Demir',  age:67, conditions:['kifoz','denge problemi'] },
+    p003: { id:'p003', name:'Murat Çelik',  age:32, conditions:['sırt kasları zayıflığı'] },
+  },
+  sessions: [],
+  currentSession: null,
+  ws: null,
+  cameraStream: null,
+  captureInterval: null,
+  repCount: 0,
+  frameCount: 0,
+  sessionActive: false,
+  // Reference template data (loaded from backend or embedded)
+  refTemplate: null,
+};
+
+// Reference series from video 1 analysis (embedded for demo)
+const REFERENCE_DATA = {
+  exercise: 'quadruped_hip_extension',
+  stats: { avg_peak: 0.775, avg_hold: 0.48, reps: 6 },
+  // Simulated leg height series
+  series: Array.from({length:322}, (_,i) => {
+    const t = i/30;
+    // 6 reps pattern
+    const rep = (t2) => {
+      const phases = [[0.6,1.0],[1.5,2.1],[2.9,3.5],[4.3,4.9],[5.2,5.8],[8.8,9.4]];
+      for(const [s,e] of phases) {
+        if(t2>=s && t2<=e) return 0.5 + 0.3*Math.sin(Math.PI*(t2-s)/(e-s));
+      }
+      return 0.25 + 0.1*Math.random();
+    };
+    return rep(t);
+  })
+};
+
+// ════════════════════════════════════════════════════════════════
+//  NAV
+// ════════════════════════════════════════════════════════════════
+function showPage(id, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  if(el) el.classList.add('active');
+
+  const titles = {
+    dashboard: 'Dashboard', patients: 'Hastalar',
+    session: 'Canlı Seans', reports: 'Raporlar', exercises: 'Egzersizler'
+  };
+  document.getElementById('pageTitle').textContent = titles[id] || id;
+
+  if(id==='patients')    renderPatients();
+  if(id==='reports')     renderReports();
+  if(id==='exercises')   renderExerciseSparkline();
+  if(id==='session')     initCamera();
+}
+
+// ════════════════════════════════════════════════════════════════
+//  DASHBOARD
+// ════════════════════════════════════════════════════════════════
+function renderDashboard() {
+  const list = document.getElementById('patient-list-dash');
+  list.innerHTML = Object.values(state.patients).map(p => `
+    <div class="patient-item" onclick="viewPatient('${p.id}')">
+      <div class="patient-avatar">${p.name[0]}</div>
+      <div>
+        <div class="patient-name">${p.name}</div>
+        <div class="patient-meta">${p.age} yaş · ${p.conditions[0]}</div>
+      </div>
+      <span class="badge badge-info">Aktif</span>
+    </div>
+  `).join('');
+
+  const sc = document.getElementById('stat-sessions');
+  sc.textContent = state.sessions.length;
+
+  const scores = state.sessions.map(s => s.report?.quality_score || 0);
+  const avg = scores.length ? (scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(0) : '—';
+  document.getElementById('stat-score').textContent = avg;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  PATIENTS
+// ════════════════════════════════════════════════════════════════
+function renderPatients() {
+  const el = document.getElementById('patients-content');
+  el.innerHTML = Object.values(state.patients).map(p => {
+    const psessions = state.sessions.filter(s => s.patient_id === p.id);
+    const lastScore = psessions.length ? psessions[psessions.length-1].report?.quality_score : null;
+    return `
+    <div class="card" style="margin-bottom:12px;">
+      <div class="patient-header">
+        <div class="patient-big-avatar">${p.name[0]}</div>
+        <div>
+          <div class="patient-hname">${p.name}</div>
+          <div style="font-size:10px;color:var(--bark2);letter-spacing:1px;">${p.age} yaş · ${p.conditions.join(' · ')}</div>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:8px;">
+          <button class="btn btn-outline" style="color:var(--cream);border-color:rgba(255,255,255,0.3);" onclick="selectPatientForSession('${p.id}')">Seans Başlat</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="grid-3">
+          <div style="text-align:center;">
+            <div style="font-family:'Cormorant Garamond',serif;font-size:28px;color:var(--bark);">${psessions.length}</div>
+            <div style="font-size:9px;letter-spacing:1.5px;color:var(--bark2);text-transform:uppercase;">Toplam Seans</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-family:'Cormorant Garamond',serif;font-size:28px;color:var(--bark);">${lastScore ? lastScore.toFixed(0) : '—'}</div>
+            <div style="font-size:9px;letter-spacing:1.5px;color:var(--bark2);text-transform:uppercase;">Son Skor</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:11px;color:var(--bark2);">${psessions.length ? new Date(psessions[psessions.length-1].started_at).toLocaleDateString('tr-TR') : 'Henüz seans yok'}</div>
+            <div style="font-size:9px;letter-spacing:1.5px;color:var(--bark2);text-transform:uppercase;">Son Seans</div>
+          </div>
+        </div>
+        ${psessions.length ? `
+        <div class="sparkline" style="margin-top:16px;" id="spark-${p.id}"></div>
+        ` : ''}
+        <div class="form-group" style="margin-top:16px;margin-bottom:0;">
+          <label>Terapist Notları</label>
+          <textarea class="notes" placeholder="Bu hasta için notlar...">${p.notes||''}</textarea>
+        </div>
+      </div>
+    </div>
+    `;
+  }).join('');
+
+  // Render sparklines
+  Object.values(state.patients).forEach(p => {
+    const el = document.getElementById(`spark-${p.id}`);
+    if(!el) return;
+    const psessions = state.sessions.filter(s => s.patient_id === p.id);
+    const scores = psessions.map(s => s.report?.quality_score || 0);
+    el.innerHTML = scores.map(s => `<div class="spark-bar" style="height:${s}%"></div>`).join('');
+  });
+}
+
+function selectPatientForSession(pid) {
+  document.getElementById('sel-patient').value = pid;
+  showPage('session', document.querySelector('[onclick*="session"]'));
+}
+
+// ════════════════════════════════════════════════════════════════
+//  CAMERA + SESSION
+// ════════════════════════════════════════════════════════════════
+async function initCamera() {
+  const video = document.getElementById('camera');
+  if(state.cameraStream) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720}});
+    video.srcObject = stream;
+    state.cameraStream = stream;
+    document.getElementById('status-dot').classList.add('active');
+    document.getElementById('status-text').textContent = 'Kamera hazır';
+  } catch(e) {
+    document.getElementById('status-text').textContent = 'Kamera erişilemedi';
+    // Demo mode
+    startDemoMode();
+  }
+}
+
+function startDemoMode() {
+  // Run demo simulation without actual camera
+  console.log('Demo modu aktif');
+}
+
+function startSession() {
+  const patientId  = document.getElementById('sel-patient').value;
+  const exerciseType = document.getElementById('sel-exercise').value;
+
+  state.sessionActive = true;
+  state.repCount = 0;
+  state.frameCount = 0;
+  state.currentSession = {
+    session_id: 'ses_' + Date.now(),
+    patient_id: patientId,
+    exercise: exerciseType,
+    started_at: new Date().toISOString(),
+    frames: []
+  };
+
+  document.getElementById('btn-start').style.display = 'none';
+  document.getElementById('btn-stop').style.display = 'block';
+  document.getElementById('status-dot').className = 'status-dot active';
+  document.getElementById('status-text').textContent = 'Analiz yapılıyor...';
+  document.getElementById('session-info').textContent = `Seans aktif · ${state.patients[patientId]?.name}`;
+
+  // Try WebSocket connection to backend
+  connectWebSocket(patientId, exerciseType);
+
+  // Also run local simulation for demo
+  startLocalAnalysis();
+}
+
+function connectWebSocket(patientId, exerciseType) {
+  try {
+    const ws = new WebSocket(`ws://localhost:8000/ws/session/${patientId}/${exerciseType}`);
+    ws.onopen = () => {
+      state.ws = ws;
+      console.log('[WS] Bağlandı');
+      // Start sending frames
+      startFrameCapture();
+    };
+    ws.onmessage = (e) => handleWSMessage(JSON.parse(e.data));
+    ws.onerror = () => {
+      console.log('[WS] Bağlanamadı — demo modu');
+      startFrameCapture(); // local demo
+    };
+    ws.onclose = () => { state.ws = null; };
+  } catch(err) {
+    startFrameCapture();
+  }
+}
+
+function startFrameCapture() {
+  const video = document.getElementById('camera');
+  const canvas = document.createElement('canvas');
+  canvas.width = 640; canvas.height = 360;
+  const ctx = canvas.getContext('2d');
+
+  state.captureInterval = setInterval(() => {
+    if(!state.sessionActive) return;
+
+    if(video.srcObject) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const b64 = canvas.toDataURL('image/jpeg', 0.7);
+
+      if(state.ws && state.ws.readyState === 1) {
+        state.ws.send(JSON.stringify({ type:'frame', data:b64 }));
+      }
+    }
+    state.frameCount++;
+  }, 100); // 10fps
+}
+
+let demoInterval;
+function startLocalAnalysis() {
+  // Simulate pose detection results for demo
+  let t = 0;
+  const rep_times = [1.0, 2.5, 4.0, 5.5, 7.0, 8.5];
+  let lastRep = -1;
+
+  demoInterval = setInterval(() => {
+    if(!state.sessionActive) return;
+    t += 0.1;
+
+    // Simulate leg height following reference pattern
+    let legH = 0.25;
+    for(const rt of rep_times) {
+      const dt = t - rt;
+      if(dt >= -0.5 && dt <= 1.0) {
+        legH = 0.5 + 0.35*Math.sin(Math.PI*(dt+0.5)/1.5);
+      }
+    }
+    legH = Math.max(0.1, Math.min(0.92, legH + (Math.random()-0.5)*0.05));
+
+    const spineF = 0.75 + Math.random()*0.2;
+    const dtw_sim = 65 + Math.random()*20;
+
+    // Update metrics
+    updateMetrics(legH, spineF, dtw_sim);
+
+    // Count reps
+    const nearRep = rep_times.findIndex(rt => Math.abs(t - rt - 0.5) < 0.15);
+    if(nearRep >= 0 && nearRep !== lastRep) {
+      lastRep = nearRep;
+      state.repCount++;
+      document.getElementById('rep-count').textContent = state.repCount;
+      showFeedback(legH);
+    }
+
+    // Draw overlay
+    drawOverlay({ torso:[0.4,0.5], hip:[0.5,0.5], ext_leg:[0.75, 0.5 - (legH-0.5)*0.4] });
+  }, 100);
+}
+
+function updateMetrics(legH, spineF, dtw) {
+  document.getElementById('met-leg').textContent   = `${(legH*100).toFixed(0)}%`;
+  document.getElementById('met-spine').textContent = `${(spineF*100).toFixed(0)}%`;
+  document.getElementById('met-dtw').textContent   = `${dtw.toFixed(0)}%`;
+  document.getElementById('bar-leg').style.width   = `${legH*100}%`;
+  document.getElementById('bar-spine').style.width = `${spineF*100}%`;
+  document.getElementById('bar-dtw').style.width   = `${dtw}%`;
+
+  // Colors
+  const barLeg = document.getElementById('bar-leg');
+  barLeg.className = 'metric-fill ' + (legH > 0.6 ? 'fill-great' : legH > 0.4 ? 'fill-good' : 'fill-warn');
+}
+
+function showFeedback(legH) {
+  const overlay = document.getElementById('feedback-overlay');
+  let msg, cls='';
+
+  const ideal = 0.65;
+  const diff  = (ideal - legH)*90;
+
+  if(legH < 0.35) {
+    msg = `↑ Bacağını ${Math.abs(diff).toFixed(0)}° daha yukarı kaldır`;
+  } else if(legH >= ideal*0.9) {
+    msg = '✓ Mükemmel pozisyon!'; cls='positive';
+  } else {
+    msg = `↑ Bacağı ${diff.toFixed(0)}° daha kaldır`;
+  }
+
+  const div = document.createElement('div');
+  div.className = `feedback-message ${cls}`;
+  div.innerHTML = `<p>${msg}</p>`;
+  overlay.appendChild(div);
+  setTimeout(() => div.remove(), 3000);
+}
+
+function handleWSMessage(msg) {
+  if(msg.type === 'frame_result') {
+    if(msg.overlay && Object.keys(msg.overlay).length) {
+      const o = msg.overlay;
+      updateMetrics(o.leg_h||0, o.spine||1, 70);
+      if(o.ext_leg) drawOverlay(o);
+    }
+    if(msg.feedback?.length) {
+      msg.feedback.forEach(f => {
+        const overlay = document.getElementById('feedback-overlay');
+        const div = document.createElement('div');
+        div.className = `feedback-message ${f.type==='positive'?'positive':''}`;
+        div.innerHTML = `<p>${f.text}</p>`;
+        overlay.appendChild(div);
+        setTimeout(()=>div.remove(), 3000);
+      });
+    }
+  }
+  if(msg.type === 'session_report') {
+    showSessionReport(msg.report);
+  }
+}
+
+function drawOverlay(data) {
+  const canvas = document.getElementById('overlay');
+  const video  = document.getElementById('camera');
+  canvas.width  = video.offsetWidth;
+  canvas.height = video.offsetHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  const cx = (x) => x * canvas.width;
+  const cy = (y) => y * canvas.height;
+
+  // Draw skeleton points
+  const points = {
+    torso:   data.torso   || [0.4, 0.45],
+    hip:     data.hip     || [0.5, 0.55],
+    ext_leg: data.ext_leg || [0.75,0.52],
+  };
+
+  ctx.strokeStyle = 'rgba(196,113,74,0.8)';
+  ctx.lineWidth   = 2;
+  ctx.setLineDash([4,2]);
+
+  // Lines
+  [['torso','hip'],['hip','ext_leg']].forEach(([a,b]) => {
+    const pa = points[a], pb = points[b];
+    ctx.beginPath();
+    ctx.moveTo(cx(pa[0]), cy(pa[1]));
+    ctx.lineTo(cx(pb[0]), cy(pb[1]));
+    ctx.stroke();
+  });
+
+  ctx.setLineDash([]);
+  Object.entries(points).forEach(([name, pt]) => {
+    ctx.beginPath();
+    ctx.arc(cx(pt[0]), cy(pt[1]), 6, 0, Math.PI*2);
+    ctx.fillStyle   = name==='ext_leg' ? 'rgba(74,92,58,0.9)' : 'rgba(196,113,74,0.9)';
+    ctx.fill();
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth   = 1.5;
+    ctx.stroke();
+  });
+
+  // Leg height indicator
+  if(data.leg_h !== undefined) {
+    const ideal = 0.65;
+    const lh    = data.leg_h;
+    ctx.fillStyle = lh >= ideal*0.9 ? 'rgba(74,92,58,0.85)' : 'rgba(196,113,74,0.85)';
+    ctx.fillRect(canvas.width-80, 10, 70, 24);
+    ctx.fillStyle = 'white';
+    ctx.font      = '10px DM Mono';
+    ctx.fillText(`${(lh*100).toFixed(0)}%`, canvas.width-60, 26);
+  }
+}
+
+function endSession() {
+  state.sessionActive = false;
+  clearInterval(demoInterval);
+  clearInterval(state.captureInterval);
+
+  if(state.ws && state.ws.readyState===1) {
+    state.ws.send(JSON.stringify({type:'end_session'}));
+  } else {
+    // Generate local report
+    generateLocalReport();
+  }
+
+  document.getElementById('btn-start').style.display = 'block';
+  document.getElementById('btn-stop').style.display  = 'none';
+  document.getElementById('status-dot').className    = 'status-dot';
+  document.getElementById('status-text').textContent = 'Seans tamamlandı';
+}
+
+function generateLocalReport() {
+  const patientId  = document.getElementById('sel-patient').value;
+  const patient    = state.patients[patientId];
+  const repCount   = state.repCount;
+
+  // Generate realistic report based on demo metrics
+  const report = {
+    exercise:            '4 Nokta Destek Kalça Uzatma',
+    total_reps:          repCount,
+    good_reps:           Math.floor(repCount * 0.7),
+    avg_peak_extension:  0.72,
+    max_peak_extension:  0.84,
+    avg_hold_duration:   0.55,
+    spine_alignment:     78.5,
+    dtw_similarity:      74.2,
+    quality_score:       71.8,
+    grade:               'İyi',
+    errors: [
+      { type:'hold_duration', count:2, message:'2 tekrarda pozisyon yeterince tutulmadı', recommendation:'Her tekrarda 2-3 saniye tutmayı hedefleyin' },
+      { type:'leg_height',    count:1, message:'1 tekrarda bacak yeterince yükseltilmedi', recommendation:'Gluteus medius güçlendirme egzersizleri ekleyin' },
+    ],
+    rep_details: Array.from({length:repCount}, (_,i) => ({
+      rep_number: i+1,
+      peak_extension: 0.6 + Math.random()*0.25,
+      hold_duration:  0.3 + Math.random()*0.8,
+    }))
+  };
+
+  const session = {
+    session_id: state.currentSession?.session_id,
+    patient_id: patientId,
+    exercise:   'quadruped_hip_extension',
+    started_at: state.currentSession?.started_at || new Date().toISOString(),
+    ended_at:   new Date().toISOString(),
+    report
+  };
+  state.sessions.push(session);
+
+  renderDashboard();
+  showSessionReport(report, session);
+}
+
+function showSessionReport(report, session) {
+  const reps = report.rep_details || [];
+  const ideal = 0.65;
+
+  const repDots = reps.map((r,i) => {
+    const cls = r.peak_extension >= ideal*0.9 ? 'good' : r.peak_extension >= ideal*0.7 ? 'ok' : 'poor';
+    return `<div class="rep-dot ${cls}" title="Tekrar ${i+1}: uzanım=${(r.peak_extension*100).toFixed(0)}%">${i+1}</div>`;
+  }).join('');
+
+  document.getElementById('modal-report-content').innerHTML = `
+    <div class="report-header">
+      <div>
+        <div class="report-exercise">${report.exercise}</div>
+        <div class="report-meta">${new Date().toLocaleDateString('tr-TR', {weekday:'long',year:'numeric',month:'long',day:'numeric'})}</div>
+        <div style="margin-top:16px;display:flex;gap:20px;">
+          <div><span style="font-family:'Cormorant Garamond',serif;font-size:22px;">${report.total_reps}</span><span style="font-size:9px;margin-left:4px;color:var(--bark2);letter-spacing:1px;text-transform:uppercase;">Tekrar</span></div>
+          <div><span style="font-family:'Cormorant Garamond',serif;font-size:22px;">${report.avg_hold_duration.toFixed(1)}s</span><span style="font-size:9px;margin-left:4px;color:var(--bark2);letter-spacing:1px;text-transform:uppercase;">Ort. Tutma</span></div>
+          <div><span style="font-family:'Cormorant Garamond',serif;font-size:22px;">${report.spine_alignment.toFixed(0)}%</span><span style="font-size:9px;margin-left:4px;color:var(--bark2);letter-spacing:1px;text-transform:uppercase;">Sırt</span></div>
+        </div>
+      </div>
+      <div>
+        <div style="font-family:'Cormorant Garamond',serif;font-size:48px;color:var(--clay-lt);line-height:1;">${report.grade}</div>
+        <div class="score-circle" style="margin-top:8px;">
+          <div class="score-val">${report.quality_score.toFixed(0)}</div>
+          <div class="score-lbl">skor</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:16px;">
+      <div class="card-title" style="margin-bottom:10px;">Tekrar Analizi</div>
+      <div class="rep-timeline">${repDots}</div>
+      <div style="font-size:9px;color:var(--bark2);margin-top:8px;display:flex;gap:16px;">
+        <span style="color:var(--moss)">● Mükemmel</span>
+        <span style="color:var(--bark2)">● Kabul edilebilir</span>
+        <span style="color:var(--clay)">● Geliştirilmeli</span>
+      </div>
+    </div>
+
+    ${report.errors?.length ? `
+    <div>
+      <div class="card-title" style="margin-bottom:10px;">Düzeltme Önerileri</div>
+      <div class="error-list">
+        ${report.errors.map(e => `
+          <div class="error-item ${e.type==='spine_alignment'?'spine':''}">
+            <div class="error-title">✗ ${e.message} (${e.count} kez)</div>
+            <div class="error-rec">→ ${e.recommendation}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    ` : '<div style="color:var(--moss);font-size:11px;">✓ Tüm hareketler doğru yapıldı!</div>'}
+
+    <div style="margin-top:16px;">
+      <div class="card-title" style="margin-bottom:8px;">DTW Referans Benzerliği</div>
+      <div class="metric-bar" style="height:8px;">
+        <div class="metric-fill fill-great" style="width:${report.dtw_similarity}%"></div>
+      </div>
+      <div style="font-size:10px;color:var(--bark2);margin-top:4px;">${report.dtw_similarity.toFixed(1)}% benzerlik (referans video ile)</div>
+    </div>
+  `;
+
+  document.getElementById('modal-report').classList.add('open');
+}
+
+// ════════════════════════════════════════════════════════════════
+//  REPORTS PAGE
+// ════════════════════════════════════════════════════════════════
+function renderReports() {
+  const el = document.getElementById('reports-content');
+  if(!state.sessions.length) {
+    el.innerHTML = `<div class="card" style="padding:40px;text-align:center;">
+      <p style="font-family:'Cormorant Garamond',serif;font-size:24px;color:var(--bark2);font-weight:300;">Henüz rapor bulunmuyor</p>
+      <p style="font-size:11px;color:var(--bark2);margin-top:8px;">Seans yapıldıktan sonra raporlar burada görünecek</p>
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = state.sessions.map(s => {
+    const patient = state.patients[s.patient_id];
+    const r = s.report;
+    return `
+    <div class="card" style="margin-bottom:12px;cursor:pointer;" onclick="showSessionReport(${JSON.stringify(r).replace(/"/g,'&quot;')})">
+      <div class="card-body" style="display:flex;align-items:center;gap:20px;">
+        <div class="patient-avatar">${patient?.name[0]||'?'}</div>
+        <div>
+          <div class="patient-name">${patient?.name||s.patient_id}</div>
+          <div class="patient-meta">${r.exercise} · ${new Date(s.started_at).toLocaleDateString('tr-TR')}</div>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:20px;align-items:center;">
+          <div style="text-align:right;">
+            <div style="font-family:'Cormorant Garamond',serif;font-size:22px;color:var(--bark);">${r.total_reps}</div>
+            <div style="font-size:9px;color:var(--bark2);text-transform:uppercase;letter-spacing:1px;">Tekrar</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-family:'Cormorant Garamond',serif;font-size:22px;color:var(--bark);">${r.quality_score?.toFixed(0)||0}</div>
+            <div style="font-size:9px;color:var(--bark2);text-transform:uppercase;letter-spacing:1px;">Skor</div>
+          </div>
+          <span class="badge ${r.grade==='Mükemmel'?'badge-good':r.grade==='İyi'?'badge-info':'badge-warn'}">${r.grade}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ════════════════════════════════════════════════════════════════
+//  EXERCISES
+// ════════════════════════════════════════════════════════════════
+function renderExerciseSparkline() {
+  const el = document.getElementById('exercise-sparkline');
+  if(!el) return;
+  // Show reference series
+  const s = REFERENCE_DATA.series;
+  const step = Math.floor(s.length / 40);
+  const samples = s.filter((_,i) => i%step===0);
+  const max = Math.max(...samples);
+  el.innerHTML = samples.map(v =>
+    `<div class="spark-bar" style="height:${(v/max*100).toFixed(0)}%;background:var(--clay);opacity:0.8;"></div>`
+  ).join('');
+}
+
+// ════════════════════════════════════════════════════════════════
+//  MODALS
+// ════════════════════════════════════════════════════════════════
+function openModal(id) {
+  document.getElementById('modal-'+id).classList.add('open');
+}
+function closeModal(id) {
+  document.getElementById('modal-'+id).classList.remove('open');
+}
+function printReport() {
+  alert('Rapor PDF olarak kaydedildi (Demo)');
+  closeModal('report');
+}
+
+function addPatient() {
+  const name = document.getElementById('new-name').value;
+  const age  = parseInt(document.getElementById('new-age').value) || 30;
+  const cond = document.getElementById('new-condition').value;
+
+  if(!name) return;
+  const id = 'p' + Date.now();
+  state.patients[id] = { id, name, age, conditions: cond.split(',').map(s=>s.trim()) };
+
+  closeModal('newPatient');
+  renderDashboard();
+  document.getElementById('new-name').value = '';
+  document.getElementById('new-age').value = '';
+  document.getElementById('new-condition').value = '';
+}
+
+// Close modals on backdrop click
+document.querySelectorAll('.modal-backdrop').forEach(b => {
+  b.addEventListener('click', (e) => {
+    if(e.target===b) b.classList.remove('open');
+  });
+});
+
+// ════════════════════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════════════════════
+renderDashboard();
+renderExerciseSparkline();
+</script>
+</body>
+</html>

@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Kenshō — Hareket Analizi</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.2.0/dist/tf-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.2.0/dist/tf-converter.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.2.0/dist/tf-backend-webgl.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.2.0/dist/tf-backend-wasm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.0/dist/pose-detection.min.js"></script>
+<style>
+:root{
+  --cream:#F5F0E8;--warm:#E8DDD0;--bark:#5C4A3A;--bark2:#8B7355;
+  --moss:#4A5C3A;--clay:#C4714A;--clay-lt:#E8956A;--ink:#2A1F15;
+  --good:#4A8A5C;--panel:#FDFAF5;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:"DM Mono",monospace;background:var(--cream);color:var(--ink);min-height:100vh;overflow-x:hidden;}
+
+/* TOPBAR */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:52px;background:var(--bark);position:sticky;top:0;z-index:200;}
+.logo{font-family:"Cormorant Garamond",serif;font-size:21px;font-weight:300;letter-spacing:2px;color:var(--cream);}
+.logo em{color:var(--clay-lt);font-style:normal;}
+.tabs{display:flex;height:100%;}
+.tab{padding:0 18px;border:none;background:transparent;cursor:pointer;font-family:"DM Mono",monospace;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(245,240,232,.45);border-bottom:2px solid transparent;transition:all .2s;}
+.tab:hover{color:var(--cream);}
+.tab.active{color:var(--clay-lt);border-bottom-color:var(--clay-lt);}
+.status-pill{font-size:9px;padding:3px 10px;border-radius:10px;background:rgba(196,113,74,.2);color:var(--clay-lt);letter-spacing:1px;transition:all .4s;}
+.status-pill.ready{background:rgba(74,138,92,.2);color:var(--good);}
+
+/* PAGES */
+.page{display:none;}
+.page.active{display:block;}
+
+/* LOADING */
+.loading-screen{position:fixed;inset:0;background:var(--ink);z-index:9999;display:flex;align-items:center;justify-content:center;transition:opacity .5s;}
+.loading-screen.hidden{opacity:0;pointer-events:none;}
+.load-box{text-align:center;color:var(--cream);width:320px;}
+.load-spinner{width:48px;height:48px;border:3px solid rgba(245,240,232,.15);border-top-color:var(--clay);border-radius:50%;margin:0 auto 20px;animation:spin 1s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.load-txt{font-size:11px;letter-spacing:1.5px;margin-bottom:16px;color:var(--bark2);}
+.load-bar-bg{height:4px;background:rgba(245,240,232,.1);border-radius:2px;overflow:hidden;}
+.load-bar{height:100%;background:var(--clay);transition:width .3s;width:0;}
+
+/* ══ LIBRARY ══ */
+.lib-wrap{padding:28px;}
+.lib-title{font-family:"Cormorant Garamond",serif;font-size:32px;font-weight:300;color:var(--bark);margin-bottom:4px;}
+.lib-sub{font-size:10px;color:var(--bark2);letter-spacing:1px;margin-bottom:24px;}
+.ex-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:18px;}
+
+.ex-card{background:white;border:1px solid var(--warm);border-radius:6px;overflow:hidden;cursor:pointer;transition:all .25s;position:relative;}
+.ex-card:hover{border-color:var(--clay);transform:translateY(-3px);box-shadow:0 12px 36px rgba(44,31,21,.14);}
+.ex-thumb{position:relative;aspect-ratio:16/9;background:#1a1510;overflow:hidden;}
+.ex-thumb img{width:100%;height:100%;object-fit:cover;transition:transform .4s;}
+.ex-card:hover .ex-thumb img{transform:scale(1.05);}
+.ex-overlay{position:absolute;inset:0;background:rgba(26,21,16,0);display:flex;align-items:center;justify-content:center;transition:background .2s;}
+.ex-card:hover .ex-overlay{background:rgba(26,21,16,.4);}
+.ex-play-btn{width:54px;height:54px;border-radius:50%;background:var(--clay);display:flex;align-items:center;justify-content:center;opacity:0;transform:scale(.75);transition:all .25s;}
+.ex-card:hover .ex-play-btn{opacity:1;transform:scale(1);}
+.play-icon{color:white;font-size:18px;margin-left:4px;line-height:1;}
+.ex-badge{position:absolute;top:10px;right:10px;padding:3px 9px;border-radius:2px;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:white;}
+.badge-easy{background:var(--moss);}
+.badge-med{background:var(--bark2);}
+.badge-hard{background:var(--clay);}
+
+.ex-info{padding:16px 18px 18px;}
+.ex-name{font-family:"Cormorant Garamond",serif;font-size:18px;font-weight:400;color:var(--bark);}
+.ex-name-tr{font-size:10px;color:var(--clay);margin-top:2px;letter-spacing:.5px;}
+.ex-desc{font-size:9px;color:var(--bark2);margin-top:6px;line-height:1.5;font-style:italic;}
+.ex-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:10px;}
+.tag{padding:2px 8px;border:1px solid var(--warm);border-radius:2px;font-size:8px;color:var(--bark2);}
+.ex-footer{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--warm);margin-top:12px;}
+.ex-ft{text-align:center;padding:8px 0;border-right:1px solid var(--warm);}
+.ex-ft:last-child{border:none;}
+.ex-ft-v{font-family:"Cormorant Garamond",serif;font-size:18px;color:var(--bark);}
+.ex-ft-l{font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--bark2);}
+
+/* ══ SESSION ══ */
+.sess-layout{display:flex;flex-direction:column;height:calc(100vh - 52px);}
+
+.sess-header{display:flex;align-items:center;justify-content:space-between;padding:8px 20px;background:white;border-bottom:1px solid var(--warm);flex-shrink:0;}
+.back-btn{padding:5px 12px;border:1px solid var(--warm);background:none;cursor:pointer;font-family:"DM Mono",monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--bark2);border-radius:2px;transition:all .15s;}
+.back-btn:hover{background:var(--warm);}
+.sess-ex-name{font-family:"Cormorant Garamond",serif;font-size:20px;font-weight:300;color:var(--bark);}
+.sess-ex-sub{font-size:9px;color:var(--bark2);letter-spacing:.8px;margin-top:1px;}
+.sess-clock{font-family:"DM Mono",monospace;font-size:14px;color:var(--bark2);letter-spacing:2px;}
+
+/* Dual video row */
+.videos-row{display:grid;grid-template-columns:1fr 1fr;flex:1;min-height:0;overflow:hidden;}
+
+.vpanel{position:relative;background:#111;overflow:hidden;}
+.vpanel-tag{position:absolute;top:10px;left:10px;z-index:10;display:flex;align-items:center;gap:6px;background:rgba(0,0,0,.65);backdrop-filter:blur(8px);padding:5px 12px;border-radius:20px;border:1px solid rgba(255,255,255,.1);}
+.vpanel-tag span{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.75);}
+.vdot{width:6px;height:6px;border-radius:50%;background:#444;flex-shrink:0;}
+.vdot.play{background:var(--clay);animation:blink 1s infinite;}
+.vdot.live{background:var(--good);animation:blink 1.5s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+.ref-video{width:100%;height:100%;object-fit:contain;display:block;}
+.user-vid{width:100%;height:100%;object-fit:contain;display:block;transform:scaleX(-1);}
+.pose-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;border:2px solid red;z-index:10;}
+
+/* Similarity badge on ref panel */
+.sim-badge{position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.15);border-radius:4px;padding:8px 14px;text-align:center;min-width:72px;}
+.sim-pct{font-family:"Cormorant Garamond",serif;font-size:28px;font-weight:300;color:var(--cream);line-height:1;}
+.sim-unit{font-size:8px;letter-spacing:2px;color:var(--bark2);}
+.sim-ring-svg{display:block;margin:0 auto 2px;}
+
+/* Bottom controls bar */
+.controls-bar{display:grid;grid-template-columns:200px 1fr 1fr 180px;border-top:2px solid var(--warm);background:var(--panel);flex-shrink:0;height:180px;overflow:hidden;}
+.ctrl-cell{padding:12px 16px;border-right:1px solid var(--warm);overflow:hidden;}
+.ctrl-cell:last-child{border:none;}
+.ctrl-lbl{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--bark2);margin-bottom:8px;}
+
+/* Angle bars */
+.a-row{display:grid;grid-template-columns:75px 1fr 40px;align-items:center;gap:6px;margin-bottom:6px;}
+.a-name{font-size:9px;color:var(--bark2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.a-bar-wrap{height:12px;border-radius:2px;background:var(--warm);position:relative;overflow:hidden;}
+.a-bar-r{position:absolute;top:0;left:0;height:100%;background:rgba(92,74,58,.3);border-radius:2px;transition:width .15s;}
+.a-bar-u{position:absolute;top:1px;left:0;height:10px;border-radius:2px;transition:width .3s,background .3s;}
+.a-val{font-size:9px;text-align:right;transition:color .3s;font-variant-numeric:tabular-nums;}
+
+/* Feedback */
+.fb-scroll{overflow-y:auto;max-height:130px;display:flex;flex-direction:column;gap:4px;}
+.fb-msg{padding:5px 9px;font-size:10px;border-left:2px solid var(--clay);background:rgba(196,113,74,.07);border-radius:0 2px 2px 0;animation:fbIn .2s ease;line-height:1.4;}
+.fb-msg.ok{border-left-color:var(--good);background:rgba(74,138,92,.07);}
+@keyframes fbIn{from{opacity:0;transform:translateX(-5px)}to{opacity:1}}
+
+/* Controls cell */
+.rep-block{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.rep-big{font-family:"Cormorant Garamond",serif;font-size:40px;font-weight:300;color:var(--bark);line-height:1;}
+.rep-info{font-size:9px;color:var(--bark2);line-height:1.5;}
+.btn{padding:7px 14px;border:none;cursor:pointer;font-family:"DM Mono",monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;border-radius:2px;transition:all .2s;width:100%;margin-bottom:5px;}
+.btn-go{background:var(--clay);color:white;}
+.btn-go:hover{background:var(--clay-lt);}
+.btn-end{background:var(--bark);color:var(--cream);display:none;}
+.btn-end:hover{opacity:.85;}
+
+/* Camera permission overlay */
+.cam-overlay{position:absolute;inset:0;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;z-index:20;}
+.cam-box{text-align:center;color:var(--cream);max-width:300px;padding:24px;}
+.cam-icon{font-size:48px;margin-bottom:16px;opacity:.6;}
+.cam-title{font-family:"Cormorant Garamond",serif;font-size:20px;margin-bottom:8px;}
+.cam-msg{font-size:10px;color:var(--bark2);line-height:1.6;margin-bottom:20px;}
+.cam-btn{padding:10px 24px;background:var(--clay);color:white;border:none;cursor:pointer;font-family:"DM Mono",monospace;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;border-radius:2px;transition:all .2s;}
+.cam-btn:hover{background:var(--clay-lt);}
+
+/* ══ REPORTS ══ */
+.rep-wrap{padding:24px 28px;}
+.rep-empty{padding:80px 0;text-align:center;}
+.rep-empty-title{font-family:"Cormorant Garamond",serif;font-size:30px;font-weight:300;color:var(--bark2);}
+
+.rcard{background:white;border:1px solid var(--warm);border-radius:6px;margin-bottom:16px;overflow:hidden;}
+.rcard-head{background:var(--bark);padding:20px 24px;display:flex;justify-content:space-between;align-items:flex-start;}
+.rcard-title{font-family:"Cormorant Garamond",serif;font-size:22px;font-weight:300;color:var(--cream);}
+.rcard-sub{font-size:9px;color:var(--bark2);margin-top:3px;letter-spacing:.5px;}
+.rcard-grade{font-family:"Cormorant Garamond",serif;font-size:52px;font-weight:300;color:var(--clay-lt);line-height:1;}
+.rcard-stats{display:grid;grid-template-columns:repeat(4,1fr);}
+.rstat{text-align:center;padding:14px 0;border-right:1px solid var(--warm);}
+.rstat:last-child{border:none;}
+.rstat-v{font-family:"Cormorant Garamond",serif;font-size:26px;color:var(--bark);}
+.rstat-l{font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:var(--bark2);}
+.sparkline{height:60px;display:flex;align-items:flex-end;gap:1px;padding:0 12px 12px;background:linear-gradient(to bottom,rgba(245,240,232,.3) 0%,transparent 100%);}
+.spark{flex:1;min-width:2px;border-radius:1px 1px 0 0;transition:height .3s;}
+</style>
+</head>
+<body>
+
+<!-- LOADING SCREEN -->
+<div class="loading-screen" id="loading-screen">
+  <div class="load-box">
+    <div class="load-spinner"></div>
+    <div class="load-txt" id="load-txt">Başlatılıyor...</div>
+    <div class="load-bar-bg"><div class="load-bar" id="load-bar"></div></div>
+  </div>
+</div>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo">Kenshō <em>·</em> Body & Breath</div>
+  <div class="tabs">
+    <button class="tab active" onclick="goTab('library')">KÜTÜPHANE</button>
+    <button class="tab" onclick="goTab('session')">CANLI SEANS</button>
+    <button class="tab" onclick="goTab('reports')">RAPORLAR</button>
+  </div>
+  <div class="status-pill" id="status-pill">Yükleniyor...</div>
+</div>
+
+<!-- LIBRARY PAGE -->
+<div class="page active" id="page-library">
+  <div class="lib-wrap">
+    <div class="lib-title">Egzersiz Kütüphanesi</div>
+    <div class="lib-sub">Referans videolarla desteklenen hareket analizi</div>
+    <div class="ex-grid" id="ex-grid"></div>
+  </div>
+</div>
+
+<!-- SESSION PAGE -->
+<div class="page" id="page-session">
+  <div class="sess-layout">
+    <div class="sess-header">
+      <button class="back-btn" onclick="goTab('library')">← GERİ</button>
+      <div>
+        <div class="sess-ex-name" id="sess-ex-name">—</div>
+        <div class="sess-ex-sub" id="sess-ex-sub">—</div>
+      </div>
+      <div class="sess-clock" id="sess-clock">00:00</div>
+    </div>
+
+    <div class="videos-row">
+      <!-- Reference video panel -->
+      <div class="vpanel">
+        <div class="vpanel-tag">
+          <div class="vdot play"></div>
+          <span>REFERANS VİDEO</span>
+        </div>
+        <video class="ref-video" id="ref-video" loop muted playsinline></video>
+        <canvas class="pose-canvas" id="ref-canvas"></canvas>
+        <div class="sim-badge">
+          <svg class="sim-ring-svg" width="40" height="40" id="sim-ring">
+            <circle cx="20" cy="20" r="16" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="3"/>
+            <circle cx="20" cy="20" r="16" fill="none" stroke="var(--clay-lt)" stroke-width="3" 
+              stroke-dasharray="100.53" stroke-dashoffset="100.53" 
+              transform="rotate(-90 20 20)" id="sim-ring-fg"/>
+          </svg>
+          <div class="sim-pct" id="sim-pct">0</div>
+          <div class="sim-unit">BENZERLİK</div>
+        </div>
+      </div>
+
+      <!-- User camera panel -->
+      <div class="vpanel">
+        <div class="vpanel-tag">
+          <div class="vdot live"></div>
+          <span>KAMERA YOK — DEMO MODU</span>
+          <span id="user-status-txt">KAMERA YOK — DEMO MODU</span>
+        </div>
+        <video class="user-vid" id="user-video" autoplay playsinline></video>
+        <canvas class="pose-canvas" id="user-canvas"></canvas>
+        
+        <!-- Camera permission overlay -->
+        <div class="cam-overlay" id="cam-overlay">
+          <div class="cam-box">
+            <div class="cam-icon">📹</div>
+            <div class="cam-title">Kamera Erişimi Gerekli</div>
+            <div class="cam-msg">Sol panelde referans video oynatılıyor. Sağ panelde sizin hareketlerinizi takip etmek için kameranıza erişmemiz gerekiyor. Pose detection ile iskeletiniz gerçek zamanlı izlenecek.</div>
+            <button class="cam-btn" onclick="requestCamera()">Kamerayı Aç ve Pose Tracking Başlat</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls-bar">
+      <div class="ctrl-cell">
+        <div class="ctrl-lbl">AÇISAL KARŞILAŞTIRMA</div>
+        <div id="angle-bars"></div>
+      </div>
+      <div class="ctrl-cell">
+        <div class="ctrl-lbl">İDEAL AÇILAR (Referans)</div>
+        <div id="ref-angle-bars"></div>
+      </div>
+      <div class="ctrl-cell">
+        <div class="ctrl-lbl">GERİ BİLDİRİM</div>
+        <div class="fb-scroll" id="feedback-box"></div>
+      </div>
+      <div class="ctrl-cell">
+        <div class="ctrl-lbl">KONTROL</div>
+        <div class="rep-block">
+          <div class="rep-big" id="rep-cnt">0</div>
+          <div class="rep-info">
+            <div style="font-weight:400;margin-bottom:2px;">TEKRAR</div>
+            <div id="sess-dur-info">—</div>
+          </div>
+        </div>
+        <button class="btn btn-go" id="btn-go" onclick="startSess()">BAŞLAT</button>
+        <button class="btn btn-end" id="btn-end" onclick="endSess()">BİTİR</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- REPORTS PAGE -->
+<div class="page" id="page-reports">
+  <div class="rep-wrap" id="rep-wrap"></div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+//  GLOBAL STATE
+// ══════════════════════════════════════════════════════════
+const S = {
+  poseDetector: null,
+  poseReady: false,
+  userStream: null,
+  cameraActive: false,
+  refVideoElement: null,
+  userVideoElement: null,
+  exercise: null,
+  active: false,
+  reps: 0,
+  lastRepState: null,
+  refAngles: {},
+  userAngles: {},
+  simHistory: [],
+  reports: [],
+  startTime: 0,
+  clockTimer: null,
+  refPoseCache: null,
+  userPoseCache: null,
+  animFrameRef: null,
+  animFrameUser: null
+};
+
+const EXERCISES = [
+  {
+    id: 'custom-exercise',
+    name: 'Custom Exercise',
+    nameTr: 'Özel Egzersiz',
+    video: './reference-video.mp4',
+    thumb: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="225"><rect fill="%235C4A3A" width="400" height="225"/><text x="50%" y="50%" font-family="Arial" font-size="24" fill="%23F5F0E8" text-anchor="middle" dominant-baseline="middle">Özel Video</text></svg>',
+    diff: 'Orta',
+    dur: '3-5dk',
+    cals: 40,
+    desc: 'Yüklediğiniz video ile özel egzersiz',
+    tags: ['Kalça', 'Omurga', 'Core', 'Kol'],
+    idealRanges: {
+      left_hip: [130, 180],
+      right_hip: [130, 180],
+      left_knee: [80, 100],
+      right_knee: [145, 175],
+      left_elbow: [140, 170],
+      right_elbow: [140, 170],
+      spine: [155, 180]
+    },
+    repDetect: { joint: 'right_hip', min: 145, max: 175 }
+  }
+];
+
+// ══════════════════════════════════════════════════════════
+//  LIBRARY
+// ══════════════════════════════════════════════════════════
+function renderLibrary() {
+  const grid = document.getElementById('ex-grid');
+  grid.innerHTML = EXERCISES.map(ex => {
+    const badgeClass = ex.diff === 'Kolay' ? 'badge-easy' : ex.diff === 'Orta' ? 'badge-med' : 'badge-hard';
+    return `
+    <div class="ex-card" onclick="loadExercise('${ex.id}')">
+      <div class="ex-thumb">
+        <img src="${ex.thumb}" alt="${ex.name}">
+        <div class="ex-overlay">
+          <div class="ex-play-btn"><span class="play-icon">▶</span></div>
+        </div>
+        <div class="ex-badge ${badgeClass}">${ex.diff}</div>
+      </div>
+      <div class="ex-info">
+        <div class="ex-name">${ex.name}</div>
+        <div class="ex-name-tr">${ex.nameTr}</div>
+        <div class="ex-desc">${ex.desc}</div>
+        <div class="ex-tags">${ex.tags.map(t => `<span class="tag">${t}</span>`).join('')}</div>
+        <div class="ex-footer">
+          <div class="ex-ft"><div class="ex-ft-v">${ex.dur}</div><div class="ex-ft-l">Süre</div></div>
+          <div class="ex-ft"><div class="ex-ft-v">${ex.cals}</div><div class="ex-ft-l">Kalori</div></div>
+          <div class="ex-ft"><div class="ex-ft-v">${ex.diff}</div><div class="ex-ft-l">Zorluk</div></div>
+          <div class="ex-ft"><div class="ex-ft-v">${ex.tags.length}</div><div class="ex-ft-l">Bölge</div></div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function loadExercise(id) {
+  S.exercise = EXERCISES.find(e => e.id === id);
+  if (!S.exercise) return;
+  
+  console.log('📺 Loading exercise:', S.exercise.name);
+  
+  document.getElementById('sess-ex-name').textContent = S.exercise.name;
+  document.getElementById('sess-ex-sub').textContent = S.exercise.nameTr;
+  
+  const refVideo = document.getElementById('ref-video');
+  console.log('🎥 Setting video source:', S.exercise.video);
+  
+  refVideo.src = S.exercise.video;
+  refVideo.load();
+  
+  // Wait for video to load
+  refVideo.addEventListener('loadedmetadata', () => {
+    console.log('✅ Video loaded:', refVideo.videoWidth, 'x', refVideo.videoHeight);
+    console.log('Video duration:', refVideo.duration, 'seconds');
+    
+    // Try to play
+    refVideo.play().then(() => {
+      console.log('▶️ Video playing');
+    }).catch(e => {
+      console.warn('⚠️ Autoplay prevented:', e);
+      console.log('User interaction may be needed to play video');
+    });
+  }, { once: true });
+  
+  refVideo.addEventListener('canplay', () => {
+    console.log('✅ Video can play');
+  }, { once: true });
+  
+  refVideo.addEventListener('playing', () => {
+    console.log('▶️ Video is playing');
+  }, { once: true });
+  
+  refVideo.addEventListener('error', (e) => {
+    console.error('❌ Video error:', e);
+  });
+  
+  S.refVideoElement = refVideo;
+  renderAngleBars();
+  renderRefAngleBars();
+  
+  goTab('session');
+  
+  // If in demo mode (no pose detection), hide camera overlay
+  if (!S.poseReady) {
+    console.log('⚠️ Pose detection not ready - demo mode');
+    document.getElementById('cam-overlay').style.display = 'none';
+    document.getElementById('user-status-txt').textContent = 'DEMO MODU - SİMÜLE EDİLMİŞ HAREKET';
+  } else {
+    // If pose detection is ready, show camera overlay and wait for user permission
+    console.log('✅ Pose detection ready - waiting for camera');
+    document.getElementById('cam-overlay').style.display = 'flex';
+    document.getElementById('user-status-txt').textContent = 'KAMERA BEKLENIYOR...';
+  }
+  
+  if (S.poseReady) {
+    console.log('🚀 Starting reference video pose detection');
+    startRefPoseDetection();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  TAB NAVIGATION
+// ══════════════════════════════════════════════════════════
+function goTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelector(`.tab:nth-child(${name === 'library' ? 1 : name === 'session' ? 2 : 3})`).classList.add('active');
+  document.getElementById('page-' + name).classList.add('active');
+  
+  if (name === 'reports') renderReports();
+}
+
+// ══════════════════════════════════════════════════════════
+//  ANGLE UI
+// ══════════════════════════════════════════════════════════
+function renderAngleBars() {
+  const container = document.getElementById('angle-bars');
+  const angles = ['Kalça (Sol)', 'Kalça (Sağ)', 'Diz (Sol)', 'Diz (Sağ)', 'Omurga'];
+  const keys = ['left_hip', 'right_hip', 'left_knee', 'right_knee', 'spine'];
+  
+  container.innerHTML = keys.map((k, i) =>
+    `<div class="a-row">
+      <div class="a-name">${angles[i]}</div>
+      <div class="a-bar-wrap">
+        <div class="a-bar-r" id="bar-r-${k}"></div>
+        <div class="a-bar-u" id="bar-u-${k}"></div>
+      </div>
+      <div class="a-val" id="val-${k}">—</div>
+    </div>`
+  ).join('');
+}
+
+function renderRefAngleBars() {
+  const container = document.getElementById('ref-angle-bars');
+  if (!S.exercise) return;
+  
+  const angles = ['Kalça (Sol)', 'Kalça (Sağ)', 'Diz (Sol)', 'Diz (Sağ)', 'Omurga'];
+  const keys = ['left_hip', 'right_hip', 'left_knee', 'right_knee', 'spine'];
+  
+  container.innerHTML = keys.map((k, i) => {
+    const range = S.exercise.idealRanges[k] || [0, 180];
+    return `<div class="a-row">
+      <div class="a-name">${angles[i]}</div>
+      <div class="a-bar-wrap">
+        <div class="a-bar-r" style="left:${range[0]/1.8}%;width:${(range[1]-range[0])/1.8}%;"></div>
+      </div>
+      <div class="a-val">${range[0]}°-${range[1]}°</div>
+    </div>`;
+  }).join('');
+}
+
+function updateAngles() {
+  const keys = ['left_hip', 'right_hip', 'left_knee', 'right_knee', 'spine'];
+  let totalSim = 0;
+  let count = 0;
+  
+  keys.forEach(k => {
+    const uVal = S.userAngles[k] || 0;
+    const rVal = S.refAngles[k] || 0;
+    const range = S.exercise?.idealRanges[k] || [0, 180];
+    
+    const uPct = Math.min(100, (uVal / 180) * 100);
+    const rPct = Math.min(100, (rVal / 180) * 100);
+    
+    const barU = document.getElementById('bar-u-' + k);
+    const barR = document.getElementById('bar-r-' + k);
+    const val = document.getElementById('val-' + k);
+    
+    if (barU) {
+      barU.style.width = uPct + '%';
+      const diff = Math.abs(uVal - rVal);
+      const inRange = uVal >= range[0] && uVal <= range[1];
+      
+      if (diff < 10 && inRange) {
+        barU.style.background = 'var(--good)';
+        val.style.color = 'var(--good)';
+      } else if (diff < 20) {
+        barU.style.background = 'var(--clay)';
+        val.style.color = 'var(--clay)';
+      } else {
+        barU.style.background = '#8B3020';
+        val.style.color = '#8B3020';
+      }
+    }
+    
+    if (val) val.textContent = Math.round(uVal) + '°';
+    
+    if (rVal > 0) {
+      const sim = 100 - Math.min(100, (Math.abs(uVal - rVal) / 180) * 100);
+      totalSim += sim;
+      count++;
+    }
+  });
+  
+  const avgSim = count > 0 ? totalSim / count : 0;
+  updateSimilarity(avgSim);
+}
+
+function updateSimilarity(pct) {
+  document.getElementById('sim-pct').textContent = Math.round(pct);
+  const circ = 100.53;
+  const offset = circ - (pct / 100) * circ;
+  document.getElementById('sim-ring-fg').style.strokeDashoffset = offset;
+  
+  if (S.active) S.simHistory.push(pct);
+}
+
+// ══════════════════════════════════════════════════════════
+//  FEEDBACK & REP COUNTING
+// ══════════════════════════════════════════════════════════
+function addFb(msg, good = false) {
+  const box = document.getElementById('feedback-box');
+  const div = document.createElement('div');
+  div.className = 'fb-msg' + (good ? ' ok' : '');
+  div.textContent = msg;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  
+  if (box.children.length > 20) box.removeChild(box.firstChild);
+}
+
+function runFeedback() {
+  if (!S.exercise) return;
+  
+  const keys = Object.keys(S.exercise.idealRanges);
+  for (const k of keys) {
+    const uVal = S.userAngles[k] || 0;
+    const [min, max] = S.exercise.idealRanges[k];
+    
+    if (uVal < min - 15) {
+      addFb(`⚠ ${k.replace('_', ' ')} açısı çok küçük (${Math.round(uVal)}°)`);
+    } else if (uVal > max + 15) {
+      addFb(`⚠ ${k.replace('_', ' ')} açısı çok büyük (${Math.round(uVal)}°)`);
+    }
+  }
+}
+
+function checkRep() {
+  if (!S.exercise || !S.exercise.repDetect) return;
+  
+  const { joint, min, max } = S.exercise.repDetect;
+  const val = S.userAngles[joint] || 0;
+  const inRange = val >= min && val <= max;
+  
+  if (inRange && S.lastRepState === false) {
+    S.reps++;
+    document.getElementById('rep-cnt').textContent = S.reps;
+    addFb('✓ Tekrar sayıldı!', true);
+  }
+  
+  S.lastRepState = inRange;
+}
+
+// ══════════════════════════════════════════════════════════
+//  POSE DETECTION - REFERENCE VIDEO
+// ══════════════════════════════════════════════════════════
+function startRefPoseDetection() {
+  const video = S.refVideoElement;
+  const canvas = document.getElementById('ref-canvas');
+  const ctx = canvas.getContext('2d');
+  
+  console.log('🎬 Starting reference video pose detection...');
+  console.log('Video element:', video);
+  console.log('Canvas element:', canvas);
+  
+  let frameCount = 0;
+  
+  async function detectRef() {
+    frameCount++;
+    
+    if (!S.poseDetector) {
+      console.warn('⚠️ Pose detector not ready');
+      S.animFrameRef = requestAnimationFrame(detectRef);
+      return;
+    }
+    
+    if (!video) {
+      console.warn('⚠️ Video element not found');
+      S.animFrameRef = requestAnimationFrame(detectRef);
+      return;
+    }
+    
+    if (video.paused || video.ended) {
+      if (frameCount % 60 === 0) {
+        console.log('⏸️ Video paused or ended, trying to play...');
+        video.play().catch(e => console.warn('Play failed:', e));
+      }
+      S.animFrameRef = requestAnimationFrame(detectRef);
+      return;
+    }
+    
+    // Resize canvas to match video
+    if (video.videoWidth > 0 && video.videoHeight > 0) {
+      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        console.log('📐 Canvas resized to:', canvas.width, 'x', canvas.height);
+      }
+    } else {
+      S.animFrameRef = requestAnimationFrame(detectRef);
+      return;
+    }
+    
+    try {
+      const poses = await S.poseDetector.estimatePoses(video);
+      
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      if (poses && poses.length > 0 && poses[0].keypoints) {
+        const pose = poses[0];
+        S.refPoseCache = pose;
+        
+        if (frameCount % 30 === 0) {
+          console.log('📊 Ref pose detected! Keypoints:', pose.keypoints.length);
+          console.log('Sample keypoint:', pose.keypoints[0]);
+        }
+        
+        // Draw skeleton on reference video
+        drawSkeleton(ctx, pose, canvas.width, canvas.height, '#E8956A', 0.3);
+        
+        // Calculate angles from reference pose
+        S.refAngles = calculateAngles(pose.keypoints);
+        
+        if (frameCount % 30 === 0) {
+          console.log('📊 Ref angles:', S.refAngles);
+        }
+        
+        // Update UI if user angles also exist
+        if (Object.keys(S.userAngles).length > 0) {
+          updateAngles();
+        }
+      } else {
+        if (frameCount % 60 === 0) {
+          console.warn('⚠️ No pose detected in reference video');
+        }
+      }
+    } catch (e) {
+      if (frameCount % 60 === 0) {
+        console.error('❌ Ref pose error:', e);
+      }
+    }
+    
+    S.animFrameRef = requestAnimationFrame(detectRef);
+  }
+  
+  // Start detection loop
+  detectRef();
+  console.log('✅ Reference pose detection loop started');
+}
+
+// ══════════════════════════════════════════════════════════
+//  POSE DETECTION - USER CAMERA
+// ══════════════════════════════════════════════════════════
+async function requestCamera() {
+  try {
+    console.log('📹 Requesting camera access...');
+    
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      video: { 
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        facingMode: 'user'
+      } 
+    });
+    
+    S.userStream = stream;
+    S.cameraActive = true;
+    
+    const video = document.getElementById('user-video');
+    video.srcObject = stream;
+    S.userVideoElement = video;
+    
+    // Wait for video to be ready
+    video.addEventListener('loadedmetadata', () => {
+      console.log('✅ Camera ready:', video.videoWidth, 'x', video.videoHeight);
+    });
+    
+    document.getElementById('cam-overlay').style.display = 'none';
+    document.getElementById('user-status-txt').textContent = 'CANLI KAMERA - POSE TRACKING';
+    
+    addFb('✅ Kamera aktif - Pose tracking başladı', true);
+    
+    if (S.poseReady) {
+      startUserPoseDetection();
+    }
+  } catch (err) {
+    console.error('❌ Camera error:', err);
+    addFb('❌ Kamera erişimi reddedildi', false);
+  }
+}
+
+function startUserPoseDetection() {
+  const video = S.userVideoElement;
+  const canvas = document.getElementById('user-canvas');
+  const ctx = canvas.getContext('2d');
+  
+  console.log('👤 Starting user camera pose detection...');
+  
+  async function detectUser() {
+    if (!S.cameraActive || !video || video.paused || video.readyState < 2 || !S.poseDetector) {
+      S.animFrameUser = requestAnimationFrame(detectUser);
+      return;
+    }
+    
+    // Resize canvas to match video
+    if (video.videoWidth > 0 && video.videoHeight > 0) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    }
+    
+    try {
+      const poses = await S.poseDetector.estimatePoses(video);
+      
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      if (poses && poses.length > 0 && poses[0].keypoints) {
+        const pose = poses[0];
+        S.userPoseCache = pose;
+        
+        // Draw skeleton on user camera (mirrored)
+        ctx.save();
+        ctx.scale(-1, 1);
+        ctx.translate(-canvas.width, 0);
+        drawSkeleton(ctx, pose, canvas.width, canvas.height, '#4A8A5C', 0.3);
+        ctx.restore();
+        
+        // Calculate angles from user pose
+        S.userAngles = calculateAngles(pose.keypoints);
+        
+        // Update comparison UI
+        updateAngles();
+        
+        // Check for feedback and rep counting
+        if (S.active) {
+          runFeedback();
+          checkRep();
+        }
+        
+        console.log('👤 User angles:', S.userAngles);
+      }
+    } catch (e) {
+      console.error('❌ User pose error:', e);
+    }
+    
+    S.animFrameUser = requestAnimationFrame(detectUser);
+  }
+  
+  // Start detection loop
+  detectUser();
+  console.log('✅ User pose detection loop started');
+}
+
+// ══════════════════════════════════════════════════════════
+//  SKELETON DRAWING
+// ══════════════════════════════════════════════════════════
+function drawSkeleton(ctx, pose, w, h, color, minConfidence = 0.3) {
+  const kp = pose.keypoints;
+  
+  // Define skeleton connections
+  const connections = [
+    // Torso
+    [5, 6],   // left shoulder - right shoulder
+    [5, 11],  // left shoulder - left hip
+    [6, 12],  // right shoulder - right hip
+    [11, 12], // left hip - right hip
+    
+    // Left arm
+    [5, 7],   // left shoulder - left elbow
+    [7, 9],   // left elbow - left wrist
+    
+    // Right arm
+    [6, 8],   // right shoulder - right elbow
+    [8, 10],  // right elbow - right wrist
+    
+    // Left leg
+    [11, 13], // left hip - left knee
+    [13, 15], // left knee - left ankle
+    
+    // Right leg
+    [12, 14], // right hip - right knee
+    [14, 16]  // right knee - right ankle
+  ];
+  
+  // Draw connections (bones)
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = color;
+  ctx.lineCap = 'round';
+  
+  connections.forEach(([i, j]) => {
+    const p1 = kp[i];
+    const p2 = kp[j];
+    
+    if (p1 && p2 && p1.score > minConfidence && p2.score > minConfidence) {
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+    }
+  });
+  
+  // Draw keypoints (joints)
+  ctx.fillStyle = color;
+  kp.forEach(pt => {
+    if (pt && pt.score > minConfidence) {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 6, 0, 2 * Math.PI);
+      ctx.fill();
+      
+      // Draw white center
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 3, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.fillStyle = color;
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+//  ANGLE CALCULATION
+// ══════════════════════════════════════════════════════════
+function calculateAngles(keypoints) {
+  const get = (name) => keypoints.find(k => k.name === name);
+  
+  const angles = {};
+  
+  // Helper to calculate angle between 3 points
+  const angle3 = (a, b, c) => {
+    if (!a || !b || !c) return 0;
+    const ba = { x: a.x - b.x, y: a.y - b.y };
+    const bc = { x: c.x - b.x, y: c.y - b.y };
+    const dot = ba.x * bc.x + ba.y * bc.y;
+    const magBA = Math.sqrt(ba.x * ba.x + ba.y * ba.y);
+    const magBC = Math.sqrt(bc.x * bc.x + bc.y * bc.y);
+    if (magBA === 0 || magBC === 0) return 0;
+    const cos = dot / (magBA * magBC);
+    return Math.acos(Math.max(-1, Math.min(1, cos))) * (180 / Math.PI);
+  };
+  
+  // Left hip: shoulder - hip - knee
+  angles.left_hip = angle3(get('left_shoulder'), get('left_hip'), get('left_knee'));
+  
+  // Right hip: shoulder - hip - knee
+  angles.right_hip = angle3(get('right_shoulder'), get('right_hip'), get('right_knee'));
+  
+  // Left knee: hip - knee - ankle
+  angles.left_knee = angle3(get('left_hip'), get('left_knee'), get('left_ankle'));
+  
+  // Right knee: hip - knee - ankle
+  angles.right_knee = angle3(get('right_hip'), get('right_knee'), get('right_ankle'));
+  
+  // Left elbow: shoulder - elbow - wrist
+  angles.left_elbow = angle3(get('left_shoulder'), get('left_elbow'), get('left_wrist'));
+  
+  // Right elbow: shoulder - elbow - wrist
+  angles.right_elbow = angle3(get('right_shoulder'), get('right_elbow'), get('right_wrist'));
+  
+  // Left shoulder: hip - shoulder - elbow
+  angles.left_shoulder = angle3(get('left_hip'), get('left_shoulder'), get('left_elbow'));
+  
+  // Right shoulder: hip - shoulder - elbow
+  angles.right_shoulder = angle3(get('right_hip'), get('right_shoulder'), get('right_elbow'));
+  
+  // Spine: average of shoulders to average of hips angle
+  const lShoulder = get('left_shoulder');
+  const rShoulder = get('right_shoulder');
+  const lHip = get('left_hip');
+  const rHip = get('right_hip');
+  
+  if (lShoulder && rShoulder && lHip && rHip) {
+    const shoulderMid = { 
+      x: (lShoulder.x + rShoulder.x) / 2, 
+      y: (lShoulder.y + rShoulder.y) / 2 
+    };
+    const hipMid = { 
+      x: (lHip.x + rHip.x) / 2, 
+      y: (lHip.y + rHip.y) / 2 
+    };
+    const dy = shoulderMid.y - hipMid.y;
+    const dx = shoulderMid.x - hipMid.x;
+    angles.spine = Math.abs(Math.atan2(dy, dx) * (180 / Math.PI));
+  }
+  
+  return angles;
+}
+
+// ══════════════════════════════════════════════════════════
+//  SESSION
+// ══════════════════════════════════════════════════════════
+function startSess() {
+  S.active = true;
+  S.reps = 0;
+  S.simHistory = [];
+  S.startTime = Date.now();
+  
+  document.getElementById('rep-cnt').textContent = '0';
+  document.getElementById('btn-go').style.display = 'none';
+  document.getElementById('btn-end').style.display = 'block';
+  document.getElementById('sess-dur-info').textContent = 'Devam ediyor...';
+  
+  addFb('▶ Seans başladı — egzersizi yapın!', true);
+  
+  S.clockTimer = setInterval(() => {
+    const s = Math.floor((Date.now() - S.startTime) / 1000);
+    document.getElementById('sess-clock').textContent =
+      String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+    document.getElementById('sess-dur-info').textContent =
+      Math.floor(s / 60) + 'dk ' + s % 60 + 'sn';
+  }, 1000);
+}
+
+function endSess() {
+  S.active = false;
+  clearInterval(S.clockTimer);
+  
+  document.getElementById('btn-go').style.display = 'block';
+  document.getElementById('btn-end').style.display = 'none';
+  
+  buildAndShowReport();
+}
+
+// ══════════════════════════════════════════════════════════
+//  REPORTS
+// ══════════════════════════════════════════════════════════
+function buildAndShowReport() {
+  const ex = S.exercise;
+  const dur = Math.round((Date.now() - S.startTime) / 1000);
+  const avg = S.simHistory.length ? S.simHistory.reduce((a, b) => a + b, 0) / S.simHistory.length : 0;
+  const grade = avg >= 82 ? 'Mükemmel' : avg >= 67 ? 'İyi' : avg >= 52 ? 'Orta' : 'Geliştirilmeli';
+  
+  S.reports.push({
+    exercise: ex.name,
+    exerciseTr: ex.nameTr,
+    date: new Date().toLocaleString('tr-TR'),
+    dur,
+    reps: S.reps,
+    avg: Math.round(avg),
+    grade,
+    hist: [...S.simHistory]
+  });
+  
+  goTab('reports');
+}
+
+function renderReports() {
+  const el = document.getElementById('rep-wrap');
+  if (!S.reports.length) {
+    el.innerHTML = '<div class="rep-empty"><div class="rep-empty-title">Henüz seans raporu yok</div><div style="font-size:11px;color:var(--bark2);margin-top:8px;">Seans tamamladıktan sonra raporlar burada görünür</div></div>';
+    return;
+  }
+  
+  el.innerHTML = [...S.reports].reverse().map(r => {
+    const step = Math.max(1, Math.floor(r.hist.length / 60));
+    const sparks = r.hist.filter((_, i) => i % step === 0);
+    const sh = sparks.map(v => `<div class="spark" style="height:${Math.max(2, v)}%;background:${v >= 75 ? 'var(--good)' : v >= 50 ? 'var(--clay)' : '#8B3020'};"></div>`).join('');
+    
+    return `
+    <div class="rcard">
+      <div class="rcard-head">
+        <div>
+          <div class="rcard-title">${r.exercise}</div>
+          <div class="rcard-sub">${r.exerciseTr}</div>
+          <div class="rcard-sub" style="margin-top:4px;">${r.date}</div>
+        </div>
+        <div class="rcard-grade">${r.grade[0]}</div>
+      </div>
+      <div class="rcard-stats">
+        <div class="rstat"><div class="rstat-v">${r.reps}</div><div class="rstat-l">Tekrar</div></div>
+        <div class="rstat"><div class="rstat-v">${r.avg}%</div><div class="rstat-l">Benzerlik</div></div>
+        <div class="rstat"><div class="rstat-v">${Math.floor(r.dur / 60)}:${String(r.dur % 60).padStart(2, '0')}</div><div class="rstat-l">Süre</div></div>
+        <div class="rstat"><div class="rstat-v" style="color:${r.avg >= 75 ? 'var(--good)' : 'var(--clay)'};">${r.grade}</div><div class="rstat-l">Sonuç</div></div>
+      </div>
+      <div class="sparkline">${sh}</div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════
+//  DEMO MODE - Fallback when WebGL is not available
+// ══════════════════════════════════════════════════════════
+function startDemoMode() {
+  console.log('⚠️ Demo mode - WebGL not available');
+  
+  let t = 0;
+  setInterval(() => {
+    t += 0.08;
+    
+    S.refAngles = {
+      left_hip: 155 + 20 * Math.sin(t * 0.6),
+      right_hip: 165 + 15 * Math.abs(Math.sin(t * 0.65)),
+      left_knee: 90 + 5 * Math.sin(t * 1.1),
+      right_knee: 160 + 10 * Math.abs(Math.sin(t * 0.9)),
+      left_elbow: 155 + 15 * Math.cos(t * 0.7),
+      right_elbow: 150 + 20 * Math.cos(t * 0.6),
+      left_shoulder: 35 + 30 * Math.abs(Math.sin(t * 0.5)),
+      right_shoulder: 32 + 28 * Math.abs(Math.sin(t * 0.5 + 0.1)),
+      spine: 165 + 10 * Math.abs(Math.sin(t * 0.4))
+    };
+    
+    S.userAngles = {
+      left_hip: S.refAngles.left_hip + 5 * Math.sin(t * 1.2),
+      right_hip: S.refAngles.right_hip + 8 * Math.sin(t * 0.8),
+      left_knee: S.refAngles.left_knee + 3 * Math.sin(t * 1.5),
+      right_knee: S.refAngles.right_knee + 6 * Math.abs(Math.sin(t * 1.1)),
+      left_elbow: S.refAngles.left_elbow + 7 * Math.cos(t * 0.9),
+      right_elbow: S.refAngles.right_elbow + 5 * Math.cos(t * 0.8),
+      left_shoulder: S.refAngles.left_shoulder + 4 * Math.sin(t * 0.7),
+      right_shoulder: S.refAngles.right_shoulder + 6 * Math.sin(t * 0.6),
+      spine: S.refAngles.spine + 3 * Math.abs(Math.sin(t * 0.5))
+    };
+    
+    updateAngles();
+    if (S.active) checkRep();
+  }, 100);
+  
+  addFb('⚠️ WebGL mevcut değil - Demo modu aktif', false);
+}
+
+// ══════════════════════════════════════════════════════════
+//  POSE MODEL INIT
+// ══════════════════════════════════════════════════════════
+async function initPose() {
+  const setLoad = (pct, txt) => {
+    document.getElementById('load-bar').style.width = pct + '%';
+    document.getElementById('load-txt').textContent = txt;
+  };
+  
+  console.log('🚀 Initializing pose detection...');
+  setLoad(20, 'TensorFlow.js hazırlanıyor...');
+  
+  try {
+    // Try backends in order of preference: WebGL -> WASM -> CPU
+    let backend = null;
+    let backendName = '';
+    
+    // Try WebGL first
+    try {
+      await tf.setBackend('webgl');
+      await tf.ready();
+      backend = 'webgl';
+      backendName = 'WebGL';
+      console.log('✅ Using WebGL backend');
+    } catch (e) {
+      console.warn('⚠️ WebGL not available:', e.message);
+      
+      // Try WASM
+      try {
+        await tf.setBackend('wasm');
+        // Set WASM path
+        tf.wasm.setWasmPaths('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.2.0/dist/');
+        await tf.ready();
+        backend = 'wasm';
+        backendName = 'WASM';
+        console.log('✅ Using WASM backend');
+      } catch (e2) {
+        console.warn('⚠️ WASM not available:', e2.message);
+        
+        // Fall back to CPU
+        await tf.setBackend('cpu');
+        await tf.ready();
+        backend = 'cpu';
+        backendName = 'CPU';
+        console.log('✅ Using CPU backend (slower)');
+      }
+    }
+    
+    console.log('✅ TensorFlow.js ready, backend:', tf.getBackend());
+    setLoad(60, 'MoveNet Pose modeli yükleniyor...');
+    
+    S.poseDetector = await poseDetection.createDetector(
+      poseDetection.SupportedModels.MoveNet,
+      { 
+        modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
+        enableSmoothing: true,
+        minPoseScore: 0.25
+      }
+    );
+    
+    S.poseReady = true;
+    setLoad(100, 'Hazır!');
+    console.log('✅ MoveNet detector ready');
+    console.log('✅ S.poseReady set to:', S.poseReady);
+    
+    document.getElementById('status-pill').textContent = `MoveNet Hazır (${backendName}) ✓`;
+    document.getElementById('status-pill').classList.add('ready');
+    
+    return new Promise(resolve => {
+      setTimeout(() => {
+        document.getElementById('loading-screen').classList.add('hidden');
+        setTimeout(() => {
+          document.getElementById('loading-screen').style.display = 'none';
+          console.log('🎉 System ready for real-time pose tracking');
+          resolve();
+        }, 500);
+      }, 600);
+    });
+    
+  } catch (err) {
+    console.warn('⚠️ Pose detection unavailable, using demo mode:', err);
+    
+    // Activate demo mode
+    S.poseReady = false;
+    setLoad(100, 'Demo Modu Aktif');
+    
+    document.getElementById('status-pill').textContent = 'Demo Modu ⚡';
+    document.getElementById('status-pill').style.background = 'rgba(74,138,92,.2)';
+    document.getElementById('status-pill').style.color = 'var(--good)';
+    
+    return new Promise(resolve => {
+      setTimeout(() => {
+        document.getElementById('loading-screen').classList.add('hidden');
+        setTimeout(() => {
+          document.getElementById('loading-screen').style.display = 'none';
+          startDemoMode();
+          resolve();
+        }, 500);
+      }, 1000);
+    });
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  BOOT
+// ══════════════════════════════════════════════════════════
+renderLibrary();
+
+// Initialize pose detection first, then auto-load exercise
+initPose().then(() => {
+  // Wait a bit more for everything to settle
+  setTimeout(() => {
+    console.log('🎯 Auto-loading exercise, poseReady:', S.poseReady);
+    loadExercise('custom-exercise');
+    
+    // Auto-request camera after exercise is loaded
+    setTimeout(() => {
+      if (!S.cameraActive && S.poseReady) {
+        console.log('📹 Auto-requesting camera');
+        requestCamera();
+      }
+    }, 1000);
+  }, 1000);
+}).catch(err => {
+  console.error('Init failed:', err);
+});
+</script>
+</body>
+</html>
